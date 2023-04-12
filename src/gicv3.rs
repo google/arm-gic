@@ -58,8 +58,7 @@ impl IntId {
         self.0 < Self::PPI_START
     }
 
-    /// Returns whether this interrupt ID is private to a core, i.e. it is an
-    /// SGI or PPI.
+    /// Returns whether this interrupt ID is private to a core, i.e. it is an SGI or PPI.
     fn is_private(self) -> bool {
         self.0 < Self::SPI_START
     }
@@ -94,15 +93,15 @@ pub struct GicV3 {
 }
 
 impl GicV3 {
-    /// Constructs a new instance of the driver for a GIC with the given
-    /// distributor and redistributor base addresses.
+    /// Constructs a new instance of the driver for a GIC with the given distributor and
+    /// redistributor base addresses.
     ///
     /// # Safety
     ///
-    /// The given base addresses must point to the GIC distributor and
-    /// redistributor registers respectively. These regions must be mapped into
-    /// the address space of the process as device memory, and not have any
-    /// other aliases, either via another instance of this driver or otherwise.
+    /// The given base addresses must point to the GIC distributor and redistributor registers
+    /// respectively. These regions must be mapped into the address space of the process as device
+    /// memory, and not have any other aliases, either via another instance of this driver or
+    /// otherwise.
     pub unsafe fn new(gicd: *mut u64, gicr: *mut u64) -> Self {
         Self {
             gicd: gicd as _,
@@ -113,18 +112,16 @@ impl GicV3 {
 
     /// Initialises the GIC.
     pub fn setup(&mut self) {
-        // Safe because writing to this system register doesn't access memory in
-        // any way.
+        // Safe because writing to this system register doesn't access memory in any way.
         unsafe {
             // Enable system register access.
             write_sysreg!(icc_sre_el1, 0x01);
         }
 
-        // Safe because we know that `self.gicr` is a valid and unique pointer
-        // to the registers of a GIC redistributor interface.
+        // Safe because we know that `self.gicr` is a valid and unique pointer to the registers of a
+        // GIC redistributor interface.
         unsafe {
-            // Mark this CPU core as awake, and wait until the GIC wakes up
-            // before continuing.
+            // Mark this CPU core as awake, and wait until the GIC wakes up before continuing.
             let mut waker = addr_of!((*self.gicr).waker).read_volatile();
             waker -= Waker::PROCESSOR_SLEEP;
             addr_of_mut!((*self.gicr).waker).write_volatile(waker);
@@ -137,27 +134,25 @@ impl GicV3 {
             }
         }
 
-        // Safe because writing to this system register doesn't access memory in
-        // any way.
+        // Safe because writing to this system register doesn't access memory in any way.
         unsafe {
-            // Disable use of `ICC_PMR_EL1` as a hint for interrupt
-            // distribution, configure a write to an EOI register to also
-            // deactivate the interrupt, and configure preemption groups for
-            // group 0 and group 1 interrupts separately.
+            // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write
+            // to an EOI register to also deactivate the interrupt, and configure preemption groups
+            // for group 0 and group 1 interrupts separately.
             write_sysreg!(icc_ctlr_el1, 0);
         }
 
-        // Safe because we know that `self.gicd` is a valid and unique pointer
-        // to the registers of a GIC distributor interface.
+        // Safe because we know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
         unsafe {
             // Enable affinity routing and non-secure group 1 interrupts.
             addr_of_mut!((*self.gicd).ctlr)
                 .write_volatile(GicdCtlr::ARE_S | GicdCtlr::EnableGrp1NS);
         }
 
-        // Safe because we know that `self.gicd` is a valid and unique pointer
-        // to the registers of a GIC distributor interface, and `self.sgi` to
-        // the SGI and PPI registers of a GIC redistributor interface.
+        // Safe because we know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
+        // redistributor interface.
         unsafe {
             // Put all SGIs and PPIs into non-secure group 1.
             addr_of_mut!((*self.sgi).igroupr0).write_volatile(0xffffffff);
@@ -167,8 +162,7 @@ impl GicV3 {
             }
         }
 
-        // Safe because writing to this system register doesn't access memory in
-        // any way.
+        // Safe because writing to this system register doesn't access memory in any way.
         unsafe {
             // Enable non-secure group 1.
             write_sysreg!(icc_igrpen1_el1, 0x00000001);
@@ -180,9 +174,9 @@ impl GicV3 {
         let index = (intid.0 / 32) as usize;
         let bit = 1 << (intid.0 % 32);
 
-        // Safe because we know that `self.gicd` is a valid and unique pointer
-        // to the registers of a GIC distributor interface, and `self.sgi` to
-        // the SGI and PPI registers of a GIC redistributor interface.
+        // Safe because we know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
+        // redistributor interface.
         unsafe {
             if enable {
                 addr_of_mut!((*self.gicd).isenabler[index]).write_volatile(bit);
@@ -201,8 +195,8 @@ impl GicV3 {
     /// Enables all interrupts.
     pub fn enable_all_interrupts(&mut self, enable: bool) {
         for i in 0..32 {
-            // Safe because we know that `self.gicd` is a valid and unique
-            // pointer to the registers of a GIC distributor interface.
+            // Safe because we know that `self.gicd` is a valid and unique pointer to the registers
+            // of a GIC distributor interface.
             unsafe {
                 if enable {
                     addr_of_mut!((*self.gicd).isenabler[i]).write_volatile(0xffffffff);
@@ -211,8 +205,8 @@ impl GicV3 {
                 }
             }
         }
-        // Safe because we know that `self.sgi` is a valid and unique pointer
-        // to the SGI and PPI registers of a GIC redistributor interface.
+        // Safe because we know that `self.sgi` is a valid and unique pointer to the SGI and PPI
+        // registers of a GIC redistributor interface.
         unsafe {
             if enable {
                 addr_of_mut!((*self.sgi).isenabler0).write_volatile(0xffffffff);
@@ -224,11 +218,9 @@ impl GicV3 {
 
     /// Sets the priority mask for the current CPU core.
     ///
-    /// Only interrupts with a higher priority (numerically lower) will be
-    /// signalled.
+    /// Only interrupts with a higher priority (numerically lower) will be signalled.
     pub fn set_priority_mask(min_priority: u8) {
-        // Safe because writing to this system register doesn't access memory in
-        // any way.
+        // Safe because writing to this system register doesn't access memory in any way.
         unsafe {
             write_sysreg!(icc_pmr_el1, min_priority.into());
         }
@@ -236,12 +228,12 @@ impl GicV3 {
 
     /// Sets the priority of the interrupt with the given ID.
     ///
-    /// Note that lower numbers correspond to higher priorities; i.e. 0 is the
-    /// highest priority, and 255 is the lowest.
+    /// Note that lower numbers correspond to higher priorities; i.e. 0 is the highest priority, and
+    /// 255 is the lowest.
     pub fn set_interrupt_priority(&mut self, intid: IntId, priority: u8) {
-        // Safe because we know that `self.gicd` is a valid and unique pointer
-        // to the registers of a GIC distributor interface, and `self.sgi` to
-        // the SGI and PPI registers of a GIC redistributor interface.
+        // Safe because we know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
+        // redistributor interface.
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             if intid.is_private() {
@@ -257,9 +249,9 @@ impl GicV3 {
         let index = (intid.0 / 16) as usize;
         let bit = 1 << (((intid.0 % 16) * 2) + 1);
 
-        // Safe because we know that `self.gicd` is a valid and unique pointer
-        // to the registers of a GIC distributor interface, and `self.sgi` to
-        // the SGI and PPI registers of a GIC redistributor interface.
+        // Safe because we know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
+        // redistributor interface.
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             let register = if intid.is_private() {
@@ -300,20 +292,17 @@ impl GicV3 {
             }
         };
 
-        // Safe because writing to this system register doesn't access memory in
-        // any way.
+        // Safe because writing to this system register doesn't access memory in any way.
         unsafe {
             write_sysreg!(icc_sgi1r_el1, sgi_value);
         }
     }
 
-    /// Gets the ID of the highest priority signalled interrupt, and
-    /// acknowledges it.
+    /// Gets the ID of the highest priority signalled interrupt, and acknowledges it.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt() -> Option<IntId> {
-        // Safe because reading this system register doesn't access memory in
-        // any way.
+        // Safe because reading this system register doesn't access memory in any way.
         let intid = unsafe { read_sysreg!(icc_iar1_el1) } as u32;
         if intid == IntId::SPECIAL_START {
             None
@@ -322,12 +311,10 @@ impl GicV3 {
         }
     }
 
-    /// Informs the interrupt controller that the CPU has completed processing
-    /// the given interrupt. This drops the interrupt priority and deactivates
-    /// the interrupt.
+    /// Informs the interrupt controller that the CPU has completed processing the given interrupt.
+    /// This drops the interrupt priority and deactivates the interrupt.
     pub fn end_interrupt(intid: IntId) {
-        // Safe because writing to this system register doesn't access memory in
-        // any way.
+        // Safe because writing to this system register doesn't access memory in any way.
         unsafe { write_sysreg!(icc_eoir1_el1, intid.0.into()) }
     }
 }

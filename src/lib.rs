@@ -49,8 +49,7 @@ use core::arch::asm;
 
 /// Disables debug, SError, IRQ and FIQ exceptions.
 pub fn irq_disable() {
-    // Safe because writing to this system register doesn't access memory in any
-    // way.
+    // Safe because writing to this system register doesn't access memory in any way.
     unsafe {
         asm!("msr DAIFSet, #0xf", options(nomem, nostack));
     }
@@ -58,8 +57,7 @@ pub fn irq_disable() {
 
 /// Enables debug, SError, IRQ and FIQ exceptions.
 pub fn irq_enable() {
-    // Safe because writing to this system register doesn't access memory in any
-    // way.
+    // Safe because writing to this system register doesn't access memory in any way.
     unsafe {
         asm!("msr DAIFClr, #0xf", options(nomem, nostack));
     }

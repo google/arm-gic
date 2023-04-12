@@ -234,8 +234,8 @@ pub struct SGI {
     /// Interrupt priority registers for extended PPI range.
     pub ipriorityr_e: [u8; 64],
     _reserved8: [u32; 488],
-    /// SGI configuration register, PPI configuration register and extended PPI
-    /// configuration registers.
+    /// SGI configuration register, PPI configuration register and extended PPI configuration
+    /// registers.
     pub icfgr: [u32; 6],
     _reserved9: [u32; 58],
     /// Interrupt group modifier register 0.
