@@ -1,4 +1,4 @@
-// Copyright 2023 the authors.
+// Copyright 2023 The arm-gic Authors.
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
