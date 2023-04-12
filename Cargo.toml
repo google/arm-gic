@@ -1,0 +1,13 @@
+[package]
+name = "arm-gic"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A driver for the Arm Generic Interrupt Controller version 3 or 4."
+authors = ["Andrew Walbran <qwandor@google.com>"]
+repository = "https://github.com/google/arm-gic"
+keywords = ["arm", "aarch64", "cortex-a", "driver", "gic", "gicv3", "interrupt-controller"]
+categories = ["embedded", "no-std", "hardware-support"]
+
+[dependencies]
+bitflags = "2.1.0"
