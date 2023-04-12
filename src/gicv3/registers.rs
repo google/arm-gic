@@ -21,6 +21,7 @@ bitflags! {
 }
 
 /// GIC Distributor registers.
+#[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
 pub struct GICD {
     /// Distributor control register.
@@ -141,6 +142,7 @@ bitflags! {
 }
 
 /// GIC Redistributor registers.
+#[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
 pub struct GICR {
     /// Redistributor control register.
@@ -191,6 +193,7 @@ pub struct GICR {
 }
 
 /// GIC Redistributor SGI and PPI registers.
+#[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
 pub struct SGI {
     _reserved0: [u32; 32],
