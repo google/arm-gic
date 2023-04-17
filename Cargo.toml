@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 description = "A driver for the Arm Generic Interrupt Controller version 3 or 4."
 authors = ["Andrew Walbran <qwandor@google.com>"]
 repository = "https://github.com/google/arm-gic"
-keywords = ["arm", "aarch64", "cortex-a", "driver", "gic", "gicv3", "interrupt-controller"]
+keywords = ["arm", "aarch64", "driver", "gic", "interrupt-controller"]
 categories = ["embedded", "no-std", "hardware-support"]
 
 [dependencies]
