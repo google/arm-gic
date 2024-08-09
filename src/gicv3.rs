@@ -319,6 +319,12 @@ impl GicV3 {
     }
 }
 
+// SAFETY: The GIC interface can be accessed from any CPU core.
+unsafe impl Send for GicV3 {}
+
+// SAFETY: Any operations which change state require `&mut GicV3`, so `&GicV3` is fine to share.
+unsafe impl Sync for GicV3 {}
+
 /// The trigger configuration for an interrupt.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Trigger {
