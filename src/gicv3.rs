@@ -49,7 +49,7 @@ impl IntId {
 
     /// Returns the interrupt ID for the given Shared Peripheral Interrupt.
     pub const fn spi(spi: u32) -> Self {
-        assert!(spi < Self::SPECIAL_START);
+        assert!(spi < Self::SPECIAL_START - Self::SPI_START);
         Self(Self::SPI_START + spi)
     }
 
