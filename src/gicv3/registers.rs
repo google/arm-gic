@@ -121,10 +121,10 @@ pub struct GICD {
     pub inmr_e: [u32; 32],
     _reserved19: [u32; 2400],
     /// Interrupt routing registers.
-    pub irouter: [u32; 1975],
-    _reserved20: [u32; 9],
+    pub irouter: [u64; 988],
+    _reserved20: [u32; 8],
     /// Interrupt routing registers for extended SPI range.
-    pub irouter_e: [u32; 2048],
+    pub irouter_e: [u64; 1024],
     _reserved21: [u32; 2048],
     /// Implementation defined registers.
     pub implementation_defined2: [u32; 4084],
