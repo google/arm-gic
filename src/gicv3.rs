@@ -4,7 +4,7 @@
 
 //! Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 
-mod registers;
+pub mod registers;
 
 use self::registers::{GicdCtlr, Waker, GICD, GICR, SGI};
 use crate::sysreg::{read_sysreg, write_sysreg};
@@ -316,6 +316,30 @@ impl GicV3 {
     pub fn end_interrupt(intid: IntId) {
         // SAFETY: Writing to this system register doesn't access memory in any way.
         unsafe { write_sysreg!(icc_eoir1_el1, intid.0.into()) }
+    }
+
+    /// Returns a raw pointer to the GIC distributor registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn gicd_ptr(&mut self) -> *mut GICD {
+        self.gicd
+    }
+
+    /// Returns a raw pointer to the GIC redistributor registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn gicr_ptr(&mut self) -> *mut GICR {
+        self.gicr
+    }
+
+    /// Returns a raw pointer to the GIC redistributor SGI and PPI registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn sgi_ptr(&mut self) -> *mut SGI {
+        self.sgi
     }
 }
 

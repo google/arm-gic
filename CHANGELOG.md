@@ -6,6 +6,10 @@
 
 - Changed `irouter` and `irouter_e` fields of `GICD` to use u64, to match GIC specification.
 
+### Improvements
+
+- Made `gicv3::registers` module public and added methods to `GicV3` to get pointers to registers.
+
 ## 0.1.1
 
 ### Improvements

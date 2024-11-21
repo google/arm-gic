@@ -2,6 +2,8 @@
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
+//! Raw register access for the GICv3.
+
 use bitflags::bitflags;
 
 bitflags! {
