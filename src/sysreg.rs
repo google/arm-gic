@@ -11,6 +11,7 @@ macro_rules! read_sysreg {
     ($sysreg:ident, $function_name:ident) => {
         pub fn $function_name() -> u64 {
             let value;
+            // SAFETY: The caller of the macro guarantees that this system register is safe to read.
             unsafe {
                 asm!(
                     concat!("mrs {value}, ", stringify!($sysreg)),
@@ -30,6 +31,8 @@ macro_rules! read_sysreg {
 macro_rules! write_sysreg {
     ($sysreg:ident, $function_name:ident) => {
         pub fn $function_name(value: u64) {
+            // SAFETY: The caller of the macro guarantees that this system register is safe to
+            // write.
             unsafe {
                 asm!(
                     concat!("msr ", stringify!($sysreg), ", {value}"),
