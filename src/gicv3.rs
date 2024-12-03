@@ -15,7 +15,6 @@ use core::{
     fmt::{self, Debug, Formatter},
     hint::spin_loop,
     mem::size_of,
-    ptr::{addr_of, addr_of_mut},
 };
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
@@ -122,11 +121,11 @@ impl GicV3 {
         // GIC redistributor interface.
         unsafe {
             // Mark this CPU core as awake, and wait until the GIC wakes up before continuing.
-            let mut waker = addr_of!((*self.gicr).waker).read_volatile();
+            let mut waker = (&raw const (*self.gicr).waker).read_volatile();
             waker -= Waker::PROCESSOR_SLEEP;
-            addr_of_mut!((*self.gicr).waker).write_volatile(waker);
+            (&raw mut (*self.gicr).waker).write_volatile(waker);
 
-            while addr_of!((*self.gicr).waker)
+            while (&raw const (*self.gicr).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {
@@ -143,8 +142,7 @@ impl GicV3 {
         // GIC distributor interface.
         unsafe {
             // Enable affinity routing and non-secure group 1 interrupts.
-            addr_of_mut!((*self.gicd).ctlr)
-                .write_volatile(GicdCtlr::ARE_S | GicdCtlr::EnableGrp1NS);
+            (&raw mut (*self.gicd).ctlr).write_volatile(GicdCtlr::ARE_S | GicdCtlr::EnableGrp1NS);
         }
 
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
@@ -152,10 +150,10 @@ impl GicV3 {
         // redistributor interface.
         unsafe {
             // Put all SGIs and PPIs into non-secure group 1.
-            addr_of_mut!((*self.sgi).igroupr0).write_volatile(0xffffffff);
+            (&raw mut (*self.sgi).igroupr0).write_volatile(0xffffffff);
             // Put all SPIs into non-secure group 1.
             for i in 0..32 {
-                addr_of_mut!((*self.gicd).igroupr[i]).write_volatile(0xffffffff);
+                (&raw mut (*self.gicd).igroupr[i]).write_volatile(0xffffffff);
             }
         }
 
@@ -173,14 +171,14 @@ impl GicV3 {
         // redistributor interface.
         unsafe {
             if enable {
-                addr_of_mut!((*self.gicd).isenabler[index]).write_volatile(bit);
+                (&raw mut (*self.gicd).isenabler[index]).write_volatile(bit);
                 if intid.is_private() {
-                    addr_of_mut!((*self.sgi).isenabler0).write_volatile(bit);
+                    (&raw mut (*self.sgi).isenabler0).write_volatile(bit);
                 }
             } else {
-                addr_of_mut!((*self.gicd).icenabler[index]).write_volatile(bit);
+                (&raw mut (*self.gicd).icenabler[index]).write_volatile(bit);
                 if intid.is_private() {
-                    addr_of_mut!((*self.sgi).icenabler0).write_volatile(bit);
+                    (&raw mut (*self.sgi).icenabler0).write_volatile(bit);
                 }
             }
         }
@@ -193,9 +191,9 @@ impl GicV3 {
             // of a GIC distributor interface.
             unsafe {
                 if enable {
-                    addr_of_mut!((*self.gicd).isenabler[i]).write_volatile(0xffffffff);
+                    (&raw mut (*self.gicd).isenabler[i]).write_volatile(0xffffffff);
                 } else {
-                    addr_of_mut!((*self.gicd).icenabler[i]).write_volatile(0xffffffff);
+                    (&raw mut (*self.gicd).icenabler[i]).write_volatile(0xffffffff);
                 }
             }
         }
@@ -203,9 +201,9 @@ impl GicV3 {
         // registers of a GIC redistributor interface.
         unsafe {
             if enable {
-                addr_of_mut!((*self.sgi).isenabler0).write_volatile(0xffffffff);
+                (&raw mut (*self.sgi).isenabler0).write_volatile(0xffffffff);
             } else {
-                addr_of_mut!((*self.sgi).icenabler0).write_volatile(0xffffffff);
+                (&raw mut (*self.sgi).icenabler0).write_volatile(0xffffffff);
             }
         }
     }
@@ -228,9 +226,9 @@ impl GicV3 {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             if intid.is_private() {
-                addr_of_mut!((*self.sgi).ipriorityr[intid.0 as usize]).write_volatile(priority);
+                (&raw mut (*self.sgi).ipriorityr[intid.0 as usize]).write_volatile(priority);
             } else {
-                addr_of_mut!((*self.gicd).ipriorityr[intid.0 as usize]).write_volatile(priority);
+                (&raw mut (*self.gicd).ipriorityr[intid.0 as usize]).write_volatile(priority);
             }
         }
     }
@@ -246,9 +244,9 @@ impl GicV3 {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             let register = if intid.is_private() {
-                addr_of_mut!((*self.sgi).icfgr[index])
+                (&raw mut (*self.sgi).icfgr[index])
             } else {
-                addr_of_mut!((*self.gicd).icfgr[index])
+                (&raw mut (*self.gicd).icfgr[index])
             };
             let v = register.read_volatile();
             register.write_volatile(match trigger {
