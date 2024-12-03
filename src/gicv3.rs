@@ -7,7 +7,10 @@
 pub mod registers;
 
 use self::registers::{GicdCtlr, Waker, GICD, GICR, SGI};
-use crate::sysreg::{read_sysreg, write_sysreg};
+use crate::sysreg::{
+    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen1_el1,
+    write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
+};
 use core::{
     fmt::{self, Debug, Formatter},
     hint::spin_loop,
@@ -112,11 +115,8 @@ impl GicV3 {
 
     /// Initialises the GIC.
     pub fn setup(&mut self) {
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            // Enable system register access.
-            write_sysreg!(icc_sre_el1, 0x01);
-        }
+        // Enable system register access.
+        write_icc_sre_el1(0x01);
 
         // SAFETY: We know that `self.gicr` is a valid and unique pointer to the registers of a
         // GIC redistributor interface.
@@ -134,13 +134,10 @@ impl GicV3 {
             }
         }
 
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write
-            // to an EOI register to also deactivate the interrupt, and configure preemption groups
-            // for group 0 and group 1 interrupts separately.
-            write_sysreg!(icc_ctlr_el1, 0);
-        }
+        // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write to
+        // an EOI register to also deactivate the interrupt, and configure preemption groups for
+        // group 0 and group 1 interrupts separately.
+        write_icc_ctlr_el1(0);
 
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface.
@@ -162,11 +159,8 @@ impl GicV3 {
             }
         }
 
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            // Enable non-secure group 1.
-            write_sysreg!(icc_igrpen1_el1, 0x00000001);
-        }
+        // Enable non-secure group 1.
+        write_icc_igrpen1_el1(0x00000001);
     }
 
     /// Enables or disables the interrupt with the given ID.
@@ -220,10 +214,7 @@ impl GicV3 {
     ///
     /// Only interrupts with a higher priority (numerically lower) will be signalled.
     pub fn set_priority_mask(min_priority: u8) {
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            write_sysreg!(icc_pmr_el1, min_priority.into());
-        }
+        write_icc_pmr_el1(min_priority.into());
     }
 
     /// Sets the priority of the interrupt with the given ID.
@@ -292,18 +283,14 @@ impl GicV3 {
             }
         };
 
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            write_sysreg!(icc_sgi1r_el1, sgi_value);
-        }
+        write_icc_sgi1r_el1(sgi_value);
     }
 
     /// Gets the ID of the highest priority signalled interrupt, and acknowledges it.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt() -> Option<IntId> {
-        // SAFETY: Reading this system register doesn't access memory in any way.
-        let intid = unsafe { read_sysreg!(icc_iar1_el1) } as u32;
+        let intid = read_icc_iar1_el1() as u32;
         if intid == IntId::SPECIAL_START {
             None
         } else {
@@ -314,8 +301,7 @@ impl GicV3 {
     /// Informs the interrupt controller that the CPU has completed processing the given interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
     pub fn end_interrupt(intid: IntId) {
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe { write_sysreg!(icc_eoir1_el1, intid.0.into()) }
+        write_icc_eoir1_el1(intid.0.into())
     }
 
     /// Returns a raw pointer to the GIC distributor registers.

@@ -2,33 +2,50 @@
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
-/// Reads and returns the value of the given aarch64 system register.
+use core::arch::asm;
+
+/// Generates a safe public function named `$function_name` to read the system register `$sysreg`.
+///
+/// This should only be used for system registers which are indeed safe to read.
 macro_rules! read_sysreg {
-    ($name:ident) => {
-        {
-            let mut value: u64;
-            ::core::arch::asm!(
-                concat!("mrs {value:x}, ", ::core::stringify!($name)),
-                value = out(reg) value,
-                options(nomem, nostack),
-            );
+    ($sysreg:ident, $function_name:ident) => {
+        pub fn $function_name() -> u64 {
+            let value;
+            unsafe {
+                asm!(
+                    concat!("mrs {value}, ", stringify!($sysreg)),
+                    options(nostack),
+                    value = out(reg) value,
+                );
+            }
             value
         }
-    }
+    };
 }
-pub(crate) use read_sysreg;
 
-/// Writes the given value to the given aarch64 system register.
+/// Generates a safe public function named `$function_name` to write to the system register
+/// `$sysreg`.
+///
+/// This should only be used for system registers which are indeed safe to write.
 macro_rules! write_sysreg {
-    ($name:ident, $value:expr) => {
-        {
-            let v: u64 = $value;
-            ::core::arch::asm!(
-                concat!("msr ", ::core::stringify!($name), ", {value:x}"),
-                value = in(reg) v,
-                options(nomem, nostack),
-            )
+    ($sysreg:ident, $function_name:ident) => {
+        pub fn $function_name(value: u64) {
+            unsafe {
+                asm!(
+                    concat!("msr ", stringify!($sysreg), ", {value}"),
+                    options(nostack),
+                    value = in(reg) value,
+                );
+            }
         }
-    }
+    };
 }
-pub(crate) use write_sysreg;
+
+read_sysreg!(icc_iar1_el1, read_icc_iar1_el1);
+
+write_sysreg!(icc_ctlr_el1, write_icc_ctlr_el1);
+write_sysreg!(icc_eoir1_el1, write_icc_eoir1_el1);
+write_sysreg!(icc_igrpen1_el1, write_icc_igrpen1_el1);
+write_sysreg!(icc_pmr_el1, write_icc_pmr_el1);
+write_sysreg!(icc_sgi1r_el1, write_icc_sgi1r_el1);
+write_sysreg!(icc_sre_el1, write_icc_sre_el1);
