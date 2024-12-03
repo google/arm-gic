@@ -214,7 +214,7 @@ impl GicV3 {
             // Put all SGIs and PPIs into non-secure group 1.
             (&raw mut (*self.sgi).igroupr0).write_volatile(0xffffffff);
             // Put all SPIs into non-secure group 1.
-            for i in 0..32 {
+            for i in 1..32 {
                 (&raw mut (*self.gicd).igroupr[i]).write_volatile(0xffffffff);
             }
         }

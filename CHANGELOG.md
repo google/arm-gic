@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bugfixes
+
+- Fixed `GicV3::setup` not to write to GICD IGROUPR[0].
+
 ### Improvements
 
 - Added more interrupt types to `IntId`, and public constants for number of each type.
