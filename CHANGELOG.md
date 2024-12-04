@@ -9,6 +9,7 @@
 ### Improvements
 
 - Added more interrupt types to `IntId`, and public constants for number of each type.
+- Added constants to `IntId` for special interrupt IDs.
 
 ## 0.1.2
 

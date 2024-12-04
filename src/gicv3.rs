@@ -25,6 +25,21 @@ const SGI_OFFSET: usize = 0x10000;
 pub struct IntId(u32);
 
 impl IntId {
+    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
+    /// S-EL2 or S-EL1.
+    pub const SPECIAL_SECURE: Self = Self(1020);
+
+    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
+    /// (non-secure) EL2 or EL1.
+    pub const SPECIAL_NONSECURE: Self = Self(1021);
+
+    /// Special interrupt ID returned when the interrupt is a non-maskable interrupt.
+    pub const SPECIAL_NMI: Self = Self(1022);
+
+    /// Special interrupt ID returned when there is no pending interrupt of sufficient priority for
+    /// the current security state and interrupt group.
+    pub const SPECIAL_NONE: Self = Self(1023);
+
     /// The maximum number of SPIs which may be supported.
     pub const MAX_SPI_COUNT: u32 = Self::SPECIAL_START - Self::SPI_START;
 
