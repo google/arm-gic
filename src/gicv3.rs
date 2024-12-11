@@ -486,6 +486,42 @@ impl GicV3 {
     pub fn sgi_ptr(&mut self) -> *mut SGI {
         self.sgi
     }
+
+    fn gicd_barrier(&mut self) {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
+        unsafe {
+            while (&raw const (*self.gicd).ctlr)
+                .read_volatile()
+                .contains(GicdCtlr::RWP)
+            {}
+        }
+    }
+
+    fn gicd_modify_control(&mut self, flags: GicdCtlr, op: BitOp) {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
+        unsafe {
+            let mut gicd_ctlr = (&raw mut (*self.gicd).ctlr).read_volatile();
+
+            match op {
+                BitOp::Set => gicd_ctlr |= flags,
+                BitOp::Clear => gicd_ctlr -= flags,
+            }
+
+            (&raw mut (*self.gicd).ctlr).write_volatile(gicd_ctlr);
+        }
+
+        self.gicd_barrier();
+    }
+
+    pub fn gicd_clear_control(&mut self, flags: GicdCtlr) {
+        self.gicd_modify_control(flags, BitOp::Clear);
+    }
+
+    pub fn gicd_set_control(&mut self, flags: GicdCtlr) {
+        self.gicd_modify_control(flags, BitOp::Set);
+    }
 }
 
 // SAFETY: The GIC interface can be accessed from any CPU core.
