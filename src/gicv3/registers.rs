@@ -22,6 +22,21 @@ bitflags! {
     }
 }
 
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    pub struct GicrCtlr: u32 {
+        const UWP = 1 << 31;
+        const DPG1S = 1 << 26;
+        const DPG1NS = 1 << 25;
+        const DPG0 = 1 << 24;
+        const RWP = 1 << 3;
+        const IR = 1 << 2;
+        const CES = 1 << 1;
+        const EnableLPIs = 1 << 0;
+    }
+}
+
 /// GIC Distributor registers.
 #[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
@@ -148,7 +163,7 @@ bitflags! {
 #[repr(C, align(8))]
 pub struct GICR {
     /// Redistributor control register.
-    pub ctlr: u32,
+    pub ctlr: GicrCtlr,
     /// Implementer identification register.
     pub iidr: u32,
     /// Redistributor type register.
