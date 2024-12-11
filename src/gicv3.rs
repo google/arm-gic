@@ -172,6 +172,14 @@ impl IntId {
     pub fn is_spi(self) -> bool {
         Self::SPI_START <= self.0 && self.0 < Self::SPECIAL_START
     }
+
+    pub fn private() -> [IntId; Self::SPI_START as usize] {
+        core::array::from_fn(|i| Self(i as u32))
+    }
+
+    pub fn spis() -> [IntId; Self::MAX_SPI_COUNT as usize] {
+        core::array::from_fn(|i| Self::spi(i as u32))
+    }
 }
 
 impl Debug for IntId {
