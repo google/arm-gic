@@ -20,6 +20,39 @@ use core::{
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
 
+enum BitOp {
+    Set,
+    Clear,
+}
+
+fn modify_bit(registers: *mut [u32], nth: usize, op: BitOp) {
+    let reg_num: usize = nth / 32;
+    assert!(reg_num < registers.len());
+
+    let bit_num: usize = nth % 32;
+    let bit_mask: u32 = 1 << bit_num;
+
+    unsafe {
+        let reg_ptr = &raw mut (*registers)[reg_num];
+        let old_value = reg_ptr.read_volatile();
+
+        let new_value: u32 = match op {
+            BitOp::Set => old_value | bit_mask,
+            BitOp::Clear => old_value & !bit_mask,
+        };
+
+        reg_ptr.write_volatile(new_value);
+    }
+}
+
+fn set_bit(registers: *mut [u32], nth: usize) {
+    modify_bit(registers, nth, BitOp::Set);
+}
+
+fn clear_bit(registers: *mut [u32], nth: usize) {
+    modify_bit(registers, nth, BitOp::Clear);
+}
+
 /// An interrupt ID.
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq)]
 pub struct IntId(u32);
@@ -333,6 +366,39 @@ impl GicV3 {
         }
     }
 
+    pub fn set_group(&mut self, intid: IntId, group: Group) {
+        // FIXME: For now we assume that we are running a single-core system.
+        // so there's just one GICR frame and one SGI configuration.
+
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
+        // redistributor interface.
+        let (igroupr, igrpmodr): (*mut [u32], *mut [u32]) = unsafe {
+            if intid.is_private() {
+                (
+                    &raw mut (*self.sgi).igroupr0 as *mut [u32; 1],
+                    &raw mut (*self.sgi).igrpmodr0 as *mut [u32; 1],
+                )
+            } else {
+                (
+                    &raw mut (*self.gicd).igroupr,
+                    &raw mut (*self.gicd).igrpmodr,
+                )
+            }
+        };
+
+        if let Group::Secure(sg) = group {
+            clear_bit(igroupr, intid.0 as usize);
+            match sg {
+                SecureIntGroup::Group1S => set_bit(igrpmodr, intid.0 as usize),
+                SecureIntGroup::Group0 => clear_bit(igrpmodr, intid.0 as usize),
+            }
+        } else {
+            set_bit(igroupr, intid.0 as usize);
+            clear_bit(igrpmodr, intid.0 as usize);
+        }
+    }
+
     /// Sends a software-generated interrupt (SGI) to the given cores.
     pub fn send_sgi(intid: IntId, target: SgiTarget) {
         assert!(intid.is_sgi());
@@ -417,6 +483,29 @@ pub enum Trigger {
     Edge,
     /// The interrupt is level triggered.
     Level,
+}
+
+/// The group configuration for an interrupt.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Group {
+    Secure(SecureIntGroup),
+    NonSecure(NonSecureIntGroup),
+}
+
+/// The group configuration for an interrupt.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SecureIntGroup {
+    /// The interrupt belongs to Secure Group 1.
+    Group1S,
+    /// The interrupt belongs to Group 0.
+    Group0,
+}
+
+/// The group configuration for an interrupt.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum NonSecureIntGroup {
+    /// The interrupt belongs to Non-secure Group 1.
+    Group1NS,
 }
 
 /// The target specification for a software-generated interrupt.
