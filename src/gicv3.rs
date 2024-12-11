@@ -25,6 +25,36 @@ const SGI_OFFSET: usize = 0x10000;
 pub struct IntId(u32);
 
 impl IntId {
+    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
+    /// S-EL2 or S-EL1.
+    pub const SPECIAL_SECURE: Self = Self(1020);
+
+    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
+    /// (non-secure) EL2 or EL1.
+    pub const SPECIAL_NONSECURE: Self = Self(1021);
+
+    /// Special interrupt ID returned when the interrupt is a non-maskable interrupt.
+    pub const SPECIAL_NMI: Self = Self(1022);
+
+    /// Special interrupt ID returned when there is no pending interrupt of sufficient priority for
+    /// the current security state and interrupt group.
+    pub const SPECIAL_NONE: Self = Self(1023);
+
+    /// The maximum number of SPIs which may be supported.
+    pub const MAX_SPI_COUNT: u32 = Self::SPECIAL_START - Self::SPI_START;
+
+    /// The number of Software Generated Interrupts.
+    pub const SGI_COUNT: u32 = Self::PPI_START - Self::SGI_START;
+
+    /// The number of (non-extended) Private Peripheral Interrupts.
+    pub const PPI_COUNT: u32 = Self::SPI_START - Self::PPI_START;
+
+    /// The maximum number of extended Private Peripheral Interrupts which may be supported.
+    pub const MAX_EPPI_COUNT: u32 = Self::EPPI_END - Self::EPPI_START;
+
+    /// The maximum number of extended Shared Peripheral Interrupts which may be supported.
+    pub const MAX_ESPI_COUNT: u32 = Self::ESPI_END - Self::ESPI_START;
+
     /// The ID of the first Software Generated Interrupt.
     const SGI_START: u32 = 0;
 
@@ -37,22 +67,57 @@ impl IntId {
     /// The first special interrupt ID.
     const SPECIAL_START: u32 = 1020;
 
+    /// One more than the last special interrupt ID.
+    const SPECIAL_END: u32 = 1024;
+
+    /// The first extended Private Peripheral Interrupt.
+    const EPPI_START: u32 = 1056;
+
+    /// One more than the last extended Private Peripheral Interrupt.
+    const EPPI_END: u32 = 1120;
+
+    /// The first extended Shared Peripheral Interrupt.
+    const ESPI_START: u32 = 4096;
+
+    /// One more than the last extended Shared Peripheral Interrupt.
+    const ESPI_END: u32 = 5120;
+
+    /// The first Locality-specific Peripheral Interrupt.
+    const LPI_START: u32 = 8192;
+
     /// Returns the interrupt ID for the given Software Generated Interrupt.
     pub const fn sgi(sgi: u32) -> Self {
-        assert!(sgi < Self::PPI_START);
+        assert!(sgi < Self::SGI_COUNT);
         Self(Self::SGI_START + sgi)
     }
 
     /// Returns the interrupt ID for the given Private Peripheral Interrupt.
     pub const fn ppi(ppi: u32) -> Self {
-        assert!(ppi < Self::SPI_START - Self::PPI_START);
+        assert!(ppi < Self::PPI_COUNT);
         Self(Self::PPI_START + ppi)
     }
 
     /// Returns the interrupt ID for the given Shared Peripheral Interrupt.
     pub const fn spi(spi: u32) -> Self {
-        assert!(spi < Self::SPECIAL_START - Self::SPI_START);
+        assert!(spi < Self::MAX_SPI_COUNT);
         Self(Self::SPI_START + spi)
+    }
+
+    /// Returns the interrupt ID for the given extended Private Peripheral Interrupt.
+    pub const fn eppi(eppi: u32) -> Self {
+        assert!(eppi < Self::MAX_EPPI_COUNT);
+        Self(Self::EPPI_START + eppi)
+    }
+
+    /// Returns the interrupt ID for the given extended Shared Peripheral Interrupt.
+    pub const fn espi(espi: u32) -> Self {
+        assert!(espi < Self::MAX_ESPI_COUNT);
+        Self(Self::ESPI_START + espi)
+    }
+
+    /// Returns the interrupt ID for the given Locality-specific Peripheral Interrupt.
+    pub const fn lpi(lpi: u32) -> Self {
+        Self(Self::LPI_START + lpi)
     }
 
     /// Returns whether this interrupt ID is for a Software Generated Interrupt.
@@ -74,8 +139,20 @@ impl Debug for IntId {
             write!(f, "PPI {}", self.0 - Self::PPI_START)
         } else if self.0 < Self::SPECIAL_START {
             write!(f, "SPI {}", self.0 - Self::SPI_START)
-        } else {
+        } else if self.0 < Self::SPECIAL_END {
             write!(f, "Special IntId {}", self.0)
+        } else if self.0 < Self::EPPI_START {
+            write!(f, "Reserved IntId {}", self.0)
+        } else if self.0 < Self::EPPI_END {
+            write!(f, "EPPI {}", self.0 - Self::EPPI_START)
+        } else if self.0 < Self::ESPI_START {
+            write!(f, "Reserved IntId {}", self.0)
+        } else if self.0 < Self::ESPI_END {
+            write!(f, "ESPI {}", self.0 - Self::ESPI_START)
+        } else if self.0 < Self::LPI_START {
+            write!(f, "Reserved IntId {}", self.0)
+        } else {
+            write!(f, "LPI {}", self.0 - Self::LPI_START)
         }
     }
 }
@@ -152,7 +229,7 @@ impl GicV3 {
             // Put all SGIs and PPIs into non-secure group 1.
             (&raw mut (*self.sgi).igroupr0).write_volatile(0xffffffff);
             // Put all SPIs into non-secure group 1.
-            for i in 0..32 {
+            for i in 1..32 {
                 (&raw mut (*self.gicd).igroupr[i]).write_volatile(0xffffffff);
             }
         }
