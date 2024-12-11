@@ -6,7 +6,7 @@
 
 pub mod registers;
 
-use self::registers::{GicdCtlr, Waker, GICD, GICR, SGI};
+use self::registers::{GicdCtlr, GicrCtlr, Waker, GICD, GICR, SGI};
 use crate::sysreg::{
     read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen1_el1,
     write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
@@ -521,6 +521,47 @@ impl GicV3 {
 
     pub fn gicd_set_control(&mut self, flags: GicdCtlr) {
         self.gicd_modify_control(flags, BitOp::Set);
+    }
+
+    pub fn gicr_barrier(&mut self) {
+        // FIXME: For now we assume that we are running a single-core system.
+        // so there's just one GICR frame and one SGI configuration.
+
+        // SAFETY: We know that `self.sgi` is a valid and unique pointer to the SGI and PPI
+        // registers of a GIC redistributor interface.
+        unsafe {
+            while (&raw const (*self.gicr).ctlr)
+                .read_volatile()
+                .contains(GicrCtlr::RWP)
+            {}
+        }
+    }
+
+    pub fn redistributor_mark_core_awake(&mut self) {
+        // FIXME: For now we assume that we are running a single-core system.
+        // so there's just one GICR frame and one SGI configuration.
+
+        // SAFETY: We know that `self.gicr` is a valid and unique pointer to
+        // the GIC redistributor interface.
+        unsafe {
+            let mut gicr_waker = (&raw mut (*self.gicr).waker).read_volatile();
+
+            /*
+             * The WAKER_PS_BIT should be changed to 0
+             * only when WAKER_CA_BIT is 1.
+             */
+            assert!(gicr_waker.contains(Waker::CHILDREN_ASLEEP));
+
+            /* Mark the connected core as awake */
+            gicr_waker -= Waker::PROCESSOR_SLEEP;
+            (&raw mut (*self.gicr).waker).write_volatile(gicr_waker);
+
+            // Wait till the WAKER_CA_BIT changes to 0.
+            while (&raw mut (*self.gicr).waker)
+                .read_volatile()
+                .contains(Waker::CHILDREN_ASLEEP)
+            {}
+        }
     }
 }
 
