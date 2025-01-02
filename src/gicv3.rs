@@ -20,37 +20,54 @@ use core::{
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
 
-enum BitOp {
-    Set,
-    Clear,
-}
-
-fn modify_bit(registers: *mut [u32], nth: usize, op: BitOp) {
+/// Modifies `nth` bit of memory pointed by `registers`.
+///
+/// # Safety
+///
+/// The caller must ensure that `registers` is a valid
+/// pointer for volatile reads and writes
+unsafe fn modify_bit(registers: *mut [u32], nth: usize, set_bit: bool) {
     let reg_num: usize = nth / 32;
     assert!(reg_num < registers.len());
 
     let bit_num: usize = nth % 32;
     let bit_mask: u32 = 1 << bit_num;
 
+    // SAFETY: `registers` is guaranteed to be
+    // a valid pointer for volatile reads and writes
+    // and `reg_num` does not exceed `*registers` length.
     unsafe {
         let reg_ptr = &raw mut (*registers)[reg_num];
         let old_value = reg_ptr.read_volatile();
 
-        let new_value: u32 = match op {
-            BitOp::Set => old_value | bit_mask,
-            BitOp::Clear => old_value & !bit_mask,
+        let new_value: u32 = if set_bit {
+            old_value | bit_mask
+        } else {
+            old_value & !bit_mask
         };
 
         reg_ptr.write_volatile(new_value);
     }
 }
 
-fn set_bit(registers: *mut [u32], nth: usize) {
-    modify_bit(registers, nth, BitOp::Set);
+/// Sets `nth` bit of memory pointed by `registers`.
+///
+/// # Safety
+///
+/// The caller must ensure that `registers` is a valid
+/// pointer for volatile reads and writes.
+unsafe fn set_bit(registers: *mut [u32], nth: usize) {
+    modify_bit(registers, nth, true);
 }
 
-fn clear_bit(registers: *mut [u32], nth: usize) {
-    modify_bit(registers, nth, BitOp::Clear);
+/// Clears `nth` bit of memory pointed by `registers`.
+///
+/// # Safety
+///
+/// The caller must ensure that `registers` is a valid
+/// pointer for volatile reads and writes.
+unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
+    modify_bit(registers, nth, false);
 }
 
 /// An interrupt ID.
@@ -168,15 +185,17 @@ impl IntId {
         self.is_sgi() || self.is_ppi()
     }
 
-    /// Returns whether this interrupt ID is private to a core, i.e. it is an SGI or PPI.
+    /// Returns whether this interrupt ID is for a Shared Peripheral Interrupt.
     pub fn is_spi(self) -> bool {
         Self::SPI_START <= self.0 && self.0 < Self::SPECIAL_START
     }
 
+    /// Returns an array of all interrupt Ids that are private to a core, i.e. SGIs and PPIs.
     pub fn private() -> [IntId; Self::SPI_START as usize] {
         core::array::from_fn(|i| Self(i as u32))
     }
 
+    /// Returns an array of all SPI Ids.
     pub fn spis() -> [IntId; Self::MAX_SPI_COUNT as usize] {
         core::array::from_fn(|i| Self::spi(i as u32))
     }
@@ -384,6 +403,7 @@ impl GicV3 {
         }
     }
 
+    /// Assigns the interrupt with id `intid` to interrupt group `group`.
     pub fn set_group(&mut self, intid: IntId, group: Group) {
         // FIXME: For now we assume that we are running a single-core system.
         // so there's just one GICR frame and one SGI configuration.
@@ -405,15 +425,19 @@ impl GicV3 {
             }
         };
 
-        if let Group::Secure(sg) = group {
-            clear_bit(igroupr, intid.0 as usize);
-            match sg {
-                SecureIntGroup::Group1S => set_bit(igrpmodr, intid.0 as usize),
-                SecureIntGroup::Group0 => clear_bit(igrpmodr, intid.0 as usize),
+        // SAFETY: We know that `igroupr` and `igrpmodr` are valid and unique pointers
+        // to the registers of GIC distributor or redistributor interface.
+        unsafe {
+            if let Group::Secure(sg) = group {
+                clear_bit(igroupr, intid.0 as usize);
+                match sg {
+                    SecureIntGroup::Group1S => set_bit(igrpmodr, intid.0 as usize),
+                    SecureIntGroup::Group0 => clear_bit(igrpmodr, intid.0 as usize),
+                }
+            } else {
+                set_bit(igroupr, intid.0 as usize);
+                clear_bit(igrpmodr, intid.0 as usize);
             }
-        } else {
-            set_bit(igroupr, intid.0 as usize);
-            clear_bit(igrpmodr, intid.0 as usize);
         }
     }
 
@@ -498,15 +522,16 @@ impl GicV3 {
         }
     }
 
-    fn gicd_modify_control(&mut self, flags: GicdCtlr, op: BitOp) {
+    fn gicd_modify_control(&mut self, flags: GicdCtlr, set_bits: bool) {
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface.
         unsafe {
             let mut gicd_ctlr = (&raw mut (*self.gicd).ctlr).read_volatile();
 
-            match op {
-                BitOp::Set => gicd_ctlr |= flags,
-                BitOp::Clear => gicd_ctlr -= flags,
+            if set_bits {
+                gicd_ctlr |= flags
+            } else {
+                gicd_ctlr -= flags
             }
 
             (&raw mut (*self.gicd).ctlr).write_volatile(gicd_ctlr);
@@ -515,14 +540,17 @@ impl GicV3 {
         self.gicd_barrier();
     }
 
+    /// Clears specified bits in GIC distributor control register.
     pub fn gicd_clear_control(&mut self, flags: GicdCtlr) {
-        self.gicd_modify_control(flags, BitOp::Clear);
+        self.gicd_modify_control(flags, false);
     }
 
+    /// Sets specified bits in GIC distributor control register.
     pub fn gicd_set_control(&mut self, flags: GicdCtlr) {
-        self.gicd_modify_control(flags, BitOp::Set);
+        self.gicd_modify_control(flags, true);
     }
 
+    /// Blocks until register write for the current Security state is no longer in progress.
     pub fn gicr_barrier(&mut self) {
         // FIXME: For now we assume that we are running a single-core system.
         // so there's just one GICR frame and one SGI configuration.
@@ -537,7 +565,9 @@ impl GicV3 {
         }
     }
 
-    pub fn redistributor_mark_core_awake(&mut self) {
+    /// Informs GIC redistributor that the core has awakened.
+    /// Blocks until `GICR_WAKER.ChildrenAsleep` is cleared.
+    pub fn redistributor_mark_core_awake(&mut self) -> Result<(), ()> {
         // FIXME: For now we assume that we are running a single-core system.
         // so there's just one GICR frame and one SGI configuration.
 
@@ -550,7 +580,9 @@ impl GicV3 {
              * The WAKER_PS_BIT should be changed to 0
              * only when WAKER_CA_BIT is 1.
              */
-            assert!(gicr_waker.contains(Waker::CHILDREN_ASLEEP));
+            if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
+                return Err(());
+            }
 
             /* Mark the connected core as awake */
             gicr_waker -= Waker::PROCESSOR_SLEEP;
@@ -561,6 +593,8 @@ impl GicV3 {
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {}
+
+            return Ok(());
         }
     }
 }
@@ -584,7 +618,7 @@ pub enum Trigger {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Group {
     Secure(SecureIntGroup),
-    NonSecure(NonSecureIntGroup),
+    Group1NS,
 }
 
 /// The group configuration for an interrupt.
@@ -594,13 +628,6 @@ pub enum SecureIntGroup {
     Group1S,
     /// The interrupt belongs to Group 0.
     Group0,
-}
-
-/// The group configuration for an interrupt.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum NonSecureIntGroup {
-    /// The interrupt belongs to Non-secure Group 1.
-    Group1NS,
 }
 
 /// The target specification for a software-generated interrupt.
