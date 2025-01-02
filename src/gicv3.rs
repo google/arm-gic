@@ -522,19 +522,13 @@ impl GicV3 {
         }
     }
 
-    fn gicd_modify_control(&mut self, flags: GicdCtlr, set_bits: bool) {
+    fn gicd_modify_control(&mut self, f: impl FnOnce(GicdCtlr) -> GicdCtlr) {
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface.
         unsafe {
-            let mut gicd_ctlr = (&raw mut (*self.gicd).ctlr).read_volatile();
+            let gicd_ctlr = (&raw mut (*self.gicd).ctlr).read_volatile();
 
-            if set_bits {
-                gicd_ctlr |= flags
-            } else {
-                gicd_ctlr -= flags
-            }
-
-            (&raw mut (*self.gicd).ctlr).write_volatile(gicd_ctlr);
+            (&raw mut (*self.gicd).ctlr).write_volatile(f(gicd_ctlr));
         }
 
         self.gicd_barrier();
@@ -542,12 +536,12 @@ impl GicV3 {
 
     /// Clears specified bits in GIC distributor control register.
     pub fn gicd_clear_control(&mut self, flags: GicdCtlr) {
-        self.gicd_modify_control(flags, false);
+        self.gicd_modify_control(|old| old - flags);
     }
 
     /// Sets specified bits in GIC distributor control register.
     pub fn gicd_set_control(&mut self, flags: GicdCtlr) {
-        self.gicd_modify_control(flags, true);
+        self.gicd_modify_control(|old| old | flags);
     }
 
     /// Blocks until register write for the current Security state is no longer in progress.
@@ -581,6 +575,7 @@ impl GicV3 {
              * only when WAKER_CA_BIT is 1.
              */
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
+                // TODO: What should be the error type, so that it is easier to understand?
                 return Err(());
             }
 
