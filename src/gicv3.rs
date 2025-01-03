@@ -16,9 +16,16 @@ use core::{
     hint::spin_loop,
     mem::size_of,
 };
+use thiserror_no_std::Error;
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
+
+#[derive(Error, Debug)]
+pub enum GICRError {
+    #[error("Redistributor has already been notified that the connected core is awake!")]
+    AlreadyAwake(),
+}
 
 /// Modifies `nth` bit of memory pointed by `registers`.
 ///
@@ -191,13 +198,16 @@ impl IntId {
     }
 
     /// Returns an array of all interrupt Ids that are private to a core, i.e. SGIs and PPIs.
-    pub fn private() -> [IntId; Self::SPI_START as usize] {
-        core::array::from_fn(|i| Self(i as u32))
+    pub fn private() -> impl Iterator<Item = IntId> {
+        let sgis = (0..Self::SGI_COUNT).map(Self::sgi);
+        let ppis = (0..Self::PPI_COUNT).map(Self::ppi);
+
+        sgis.chain(ppis)
     }
 
     /// Returns an array of all SPI Ids.
-    pub fn spis() -> [IntId; Self::MAX_SPI_COUNT as usize] {
-        core::array::from_fn(|i| Self::spi(i as u32))
+    pub fn spis() -> impl Iterator<Item = IntId> {
+        (0..Self::MAX_SPI_COUNT).map(Self::spi)
     }
 }
 
@@ -561,7 +571,7 @@ impl GicV3 {
 
     /// Informs GIC redistributor that the core has awakened.
     /// Blocks until `GICR_WAKER.ChildrenAsleep` is cleared.
-    pub fn redistributor_mark_core_awake(&mut self) -> Result<(), ()> {
+    pub fn redistributor_mark_core_awake(&mut self) -> Result<(), GICRError> {
         // FIXME: For now we assume that we are running a single-core system.
         // so there's just one GICR frame and one SGI configuration.
 
@@ -575,8 +585,7 @@ impl GicV3 {
              * only when WAKER_CA_BIT is 1.
              */
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
-                // TODO: What should be the error type, so that it is easier to understand?
-                return Err(());
+                return Err(GICRError::AlreadyAwake());
             }
 
             /* Mark the connected core as awake */
@@ -589,7 +598,7 @@ impl GicV3 {
                 .contains(Waker::CHILDREN_ASLEEP)
             {}
 
-            return Ok(());
+            Ok(())
         }
     }
 }
