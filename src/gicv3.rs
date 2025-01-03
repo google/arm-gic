@@ -16,15 +16,15 @@ use core::{
     hint::spin_loop,
     mem::size_of,
 };
-use thiserror_no_std::Error;
+use thiserror::Error;
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum GICRError {
-    #[error("Redistributor has already been notified that the connected core is awake!")]
-    AlreadyAwake(),
+    #[error("Redistributor has already been notified that the connected core is awake")]
+    AlreadyAwake,
 }
 
 /// Modifies `nth` bit of memory pointed by `registers`.
@@ -585,7 +585,7 @@ impl GicV3 {
              * only when WAKER_CA_BIT is 1.
              */
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
-                return Err(GICRError::AlreadyAwake());
+                return Err(GICRError::AlreadyAwake);
             }
 
             /* Mark the connected core as awake */
