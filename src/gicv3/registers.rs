@@ -377,3 +377,30 @@ pub struct SGI {
     pub implementation_defined: [u32; 4084],
     _reserved13: [u32; 12],
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_espi() {
+        assert_eq!(Typer(0xffffffff).max_espi().0, IntId::ESPI_END - 1);
+    }
+
+    #[test]
+    fn num_lpis() {
+        // num_LPIs is 0, no IDbits means no LPIs.
+        assert_eq!(Typer(0).num_lpis(), 0);
+        // num_LPIs is 0, 13 IDbits means no LPIs.
+        assert_eq!(Typer(12 << 19).num_lpis(), 0);
+        // num_LPIs is 0, 14 IDbits means 2**13 LPIs.
+        assert_eq!(Typer(13 << 19).num_lpis(), 1 << 13);
+        // num_LPIs is 0, 15 IDbits means 2**13 LPIs.
+        assert_eq!(Typer(13 << 19).num_lpis(), 1 << 13);
+
+        // num_LPIs is specified.
+        assert_eq!(Typer(1 << 11).num_lpis(), 4);
+        assert_eq!(Typer(2 << 11).num_lpis(), 8);
+        assert_eq!(Typer(16 << 11).num_lpis(), 1 << 17);
+    }
+}
