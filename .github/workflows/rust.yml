@@ -24,6 +24,8 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Test on host
+        run: cargo test --target=x86_64-unknown-linux-gnu --lib
 
   format:
     runs-on: ubuntu-latest
