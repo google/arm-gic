@@ -4,7 +4,9 @@
 
 //! Raw register access for the GICv3.
 
+use super::IntId;
 use bitflags::bitflags;
+use core::cmp::min;
 
 bitflags! {
     #[repr(transparent)]
@@ -37,6 +39,106 @@ bitflags! {
     }
 }
 
+/// Interrupt controller type register value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct Typer(u32);
+
+impl Typer {
+    /// Returns the value of the ESPI_range field.
+    pub fn espi_range(self) -> u32 {
+        self.0 >> 27
+    }
+
+    /// Returns the highest supported Extended SPI interrupt ID.
+    pub fn max_espi(self) -> IntId {
+        IntId::espi(32 * self.espi_range() + 31)
+    }
+
+    /// Returns the range of affinity level 0 values supported for targeted SGIs.
+    pub fn range_selector_support(self) -> RangeSelectorSupport {
+        if self.0 & (1 << 26) == 0 {
+            RangeSelectorSupport::AffZero16
+        } else {
+            RangeSelectorSupport::AffZero256
+        }
+    }
+
+    /// Returns whether 1 of N SPI interrupts are supported.
+    pub fn one_of_n_supported(self) -> bool {
+        self.0 & (1 << 25) == 0
+    }
+
+    /// Returns whether the GICD supports nonzero values for affinity level 3.
+    pub fn affinity_3_supported(self) -> bool {
+        self.0 & (1 << 24) != 0
+    }
+
+    /// Returns the number of interrupt ID bits supported.
+    pub fn id_bits(self) -> u32 {
+        ((self.0 >> 19) & 0b11111) + 1
+    }
+
+    /// Returns whether Direct Virtual LPI injection is supported.
+    pub fn dvis_supported(self) -> bool {
+        self.0 & (1 << 18) != 0
+    }
+
+    /// Returns whether LPIs are supported.
+    pub fn lpis_supported(self) -> bool {
+        self.0 & (1 << 17) != 0
+    }
+
+    /// Returns whether message-based interrupts are supported.
+    pub fn mpis_supported(self) -> bool {
+        self.0 & (1 << 16) != 0
+    }
+
+    /// Returns the number of LPIs supported.
+    pub fn num_lpis(self) -> u32 {
+        let num_lpis = (self.0 >> 11) & 0b11111;
+        if num_lpis == 0 {
+            (1u32 << self.id_bits()).saturating_sub(8192)
+        } else {
+            2 << num_lpis
+        }
+    }
+
+    /// Returns whether the GIC supports two security states.
+    pub fn security_extn(self) -> bool {
+        self.0 & (1 << 10) != 0
+    }
+
+    /// Returns whether the non-maskable interrupt property is supported.
+    pub fn nmi_supported(self) -> bool {
+        self.0 & (1 << 9) != 0
+    }
+
+    /// Returns whether the extended SPI range is implemented.
+    pub fn espi_supported(self) -> bool {
+        self.0 & (1 << 8) != 0
+    }
+
+    /// Returns the number of CPU cores supported when affinity routing is disabled.
+    pub fn num_cpus(self) -> u32 {
+        (self.0 >> 5) & 0b111
+    }
+
+    /// Returns the number of SPIs supported.
+    pub fn num_spis(self) -> u32 {
+        let it_lines = self.0 & 0b11111;
+        min(32 * it_lines, IntId::MAX_SPI_COUNT)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RangeSelectorSupport {
+    /// The IRI supports targeted SGIs with affinity level 0 values up to 15.
+    AffZero16,
+    /// The IRI supports targeted SGIs with affinity level 0 values up to 255.
+    AffZero256,
+}
+
 /// GIC Distributor registers.
 #[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
@@ -44,7 +146,7 @@ pub struct GICD {
     /// Distributor control register.
     pub ctlr: GicdCtlr,
     /// Interrupt controller type register.
-    pub typer: u32,
+    pub typer: Typer,
     /// Distributor implementer identification register.
     pub iidr: u32,
     /// Interrupt controller type register 2.

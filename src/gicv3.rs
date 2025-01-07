@@ -13,6 +13,7 @@ use crate::sysreg::{
 };
 use crate::{IntId, Trigger};
 use core::{fmt::Debug, hint::spin_loop, mem::size_of};
+use registers::Typer;
 use thiserror::Error;
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
@@ -326,6 +327,13 @@ impl GicV3 {
     /// This drops the interrupt priority and deactivates the interrupt.
     pub fn end_interrupt(intid: IntId) {
         write_icc_eoir1_el1(intid.0.into())
+    }
+
+    /// Returns information about what the GIC implementation supports.
+    pub fn typer(&self) -> Typer {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a GIC
+        // distributor interface.
+        unsafe { (&raw mut (*self.gicd).typer).read_volatile() }
     }
 
     /// Returns a raw pointer to the GIC distributor registers.
