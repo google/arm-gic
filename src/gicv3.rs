@@ -417,7 +417,7 @@ impl GicV3 {
         // SAFETY: We know that `self.gicr` is a valid and unique pointer to
         // the GIC redistributor interface.
         unsafe {
-            let mut gicr_waker = (&raw mut (*self.gicr).waker).read_volatile();
+            let mut gicr_waker = (&raw const (*self.gicr).waker).read_volatile();
 
             /*
              * The WAKER_PS_BIT should be changed to 0
@@ -432,7 +432,7 @@ impl GicV3 {
             (&raw mut (*self.gicr).waker).write_volatile(gicr_waker);
 
             // Wait till the WAKER_CA_BIT changes to 0.
-            while (&raw mut (*self.gicr).waker)
+            while (&raw const (*self.gicr).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {}
