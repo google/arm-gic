@@ -19,6 +19,7 @@ use thiserror::Error;
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
 
+/// An error which may be returned from operations on a GIC Redistributor.
 #[derive(Error, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum GICRError {
     #[error("Redistributor has already been notified that the connected core is awake")]
@@ -29,11 +30,9 @@ pub enum GICRError {
 ///
 /// # Safety
 ///
-/// The caller must ensure that `registers` is a valid
-/// pointer for volatile reads and writes
+/// The caller must ensure that `registers` is a valid pointer for volatile reads and writes.
 unsafe fn modify_bit(registers: *mut [u32], nth: usize, set_bit: bool) {
     let reg_num: usize = nth / 32;
-    assert!(reg_num < registers.len());
 
     let bit_num: usize = nth % 32;
     let bit_mask: u32 = 1 << bit_num;

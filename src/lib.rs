@@ -180,6 +180,7 @@ impl IntId {
         Self::SPI_START <= self.0 && self.0 < Self::SPECIAL_START
     }
 
+    // TODO: Change this to return a Range<IntId> once core::iter::Step is stabilised.
     /// Returns an array of all interrupt Ids that are private to a core, i.e. SGIs and PPIs.
     pub fn private() -> impl Iterator<Item = IntId> {
         let sgis = (0..Self::SGI_COUNT).map(Self::sgi);
@@ -188,6 +189,7 @@ impl IntId {
         sgis.chain(ppis)
     }
 
+    // TODO: Change this to return a Range<IntId> once core::iter::Step is stabilised.
     /// Returns an array of all SPI Ids.
     pub fn spis() -> impl Iterator<Item = IntId> {
         (0..Self::MAX_SPI_COUNT).map(Self::spi)
