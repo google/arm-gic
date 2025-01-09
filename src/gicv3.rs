@@ -407,7 +407,8 @@ impl GicV3 {
         }
     }
 
-    /// Informs GIC redistributor that the core has awakened.
+    /// Informs the GIC redistributor that the core has awakened.
+    ///
     /// Blocks until `GICR_WAKER.ChildrenAsleep` is cleared.
     pub fn redistributor_mark_core_awake(&mut self) -> Result<(), GICRError> {
         // FIXME: For now we assume that we are running a single-core system.
@@ -418,15 +419,12 @@ impl GicV3 {
         unsafe {
             let mut gicr_waker = (&raw const (*self.gicr).waker).read_volatile();
 
-            /*
-             * The WAKER_PS_BIT should be changed to 0
-             * only when WAKER_CA_BIT is 1.
-             */
+            // The WAKER_PS_BIT should be changed to 0 only when WAKER_CA_BIT is 1.
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
                 return Err(GICRError::AlreadyAwake);
             }
 
-            /* Mark the connected core as awake */
+            // Mark the connected core as awake.
             gicr_waker -= Waker::PROCESSOR_SLEEP;
             (&raw mut (*self.gicr).waker).write_volatile(gicr_waker);
 
