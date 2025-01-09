@@ -12,7 +12,7 @@ use crate::sysreg::{
     write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
 };
 use crate::{IntId, Trigger};
-use core::{fmt::Debug, hint::spin_loop, mem::size_of};
+use core::hint::spin_loop;
 use registers::Typer;
 use thiserror::Error;
 
@@ -96,7 +96,7 @@ impl GicV3 {
         Self {
             gicd: gicd as _,
             gicr: gicr as _,
-            sgi: gicr.wrapping_add(SGI_OFFSET / size_of::<u64>()) as _,
+            sgi: gicr.wrapping_byte_add(SGI_OFFSET) as _,
         }
     }
 
