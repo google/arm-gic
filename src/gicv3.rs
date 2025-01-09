@@ -105,21 +105,8 @@ impl GicV3 {
         // Enable system register access.
         write_icc_sre_el1(0x01);
 
-        // SAFETY: We know that `self.gicr` is a valid and unique pointer to the registers of a
-        // GIC redistributor interface.
-        unsafe {
-            // Mark this CPU core as awake, and wait until the GIC wakes up before continuing.
-            let mut waker = (&raw const (*self.gicr).waker).read_volatile();
-            waker -= Waker::PROCESSOR_SLEEP;
-            (&raw mut (*self.gicr).waker).write_volatile(waker);
-
-            while (&raw const (*self.gicr).waker)
-                .read_volatile()
-                .contains(Waker::CHILDREN_ASLEEP)
-            {
-                spin_loop();
-            }
-        }
+        // Ignore error in case core is already awake.
+        let _ = self.redistributor_mark_core_awake();
 
         // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write to
         // an EOI register to also deactivate the interrupt, and configure preemption groups for
@@ -432,7 +419,9 @@ impl GicV3 {
             while (&raw const (*self.gicr).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
-            {}
+            {
+                spin_loop();
+            }
 
             Ok(())
         }
