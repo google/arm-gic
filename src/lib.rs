@@ -2,7 +2,7 @@
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
-//! Driver for the Arm Generic Interrupt Controller version 3 or 4, on aarch64.
+//! Driver for the Arm Generic Interrupt Controller version 2, 3 or 4, on aarch64.
 //!
 //! This top level module contains functions that are not specific to any particular interrupt
 //! controller, as support for other GIC versions may be added in future.
@@ -43,6 +43,7 @@
 #![no_std]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+pub mod gicv2;
 pub mod gicv3;
 mod sysreg;
 
