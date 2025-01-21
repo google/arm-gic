@@ -7,10 +7,9 @@
 mod registers;
 
 use self::registers::{GicdCtlr, GICC, GICD};
-use crate::sysreg::{read_sysreg, write_sysreg};
 use core::{
     fmt::{self, Debug, Formatter},
-    ptr::{addr_of, addr_of_mut, NonNull},
+    ptr::{addr_of, addr_of_mut},
 };
 
 /// An interrupt ID.
@@ -104,13 +103,15 @@ impl GicV2 {
     }
 
     fn max_irqs(&self) -> u32 {
-        ((self.gicd.as_ptr().TYPER().read() as u32 & 0b11111) + 1) * 32
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
+        unsafe { ((addr_of!((*self.gicd).typer).read_volatile() as u32 & 0b11111) + 1) * 32 }
     }
 
     /// Initialises the GIC.
     pub fn setup(&mut self) {
         unsafe {
-            addr_of_mut!((*self.gicd).ctlr).write_volatile(0b10);
+            addr_of_mut!((*self.gicd).ctlr).write_volatile(GicdCtlr::EnableGrp1);
             for i in 0..32 {
                 addr_of_mut!((*self.gicd).igroupr[i]).write_volatile(0xffffffff);
             }
@@ -239,11 +240,12 @@ impl GicV2 {
         // SAFETY: This memory access is guaranteed by the user passing along a valid GICD address.
         unsafe {
             let intid = addr_of_mut!((*self.gicc).aiar).read_volatile() as u32;
-        }
-        if intid == IntId::SPECIAL_START {
-            None
-        } else {
-            Some(IntId(intid))
+
+            if intid == IntId::SPECIAL_START {
+                None
+            } else {
+                Some(IntId(intid))
+            }
         }
     }
 
