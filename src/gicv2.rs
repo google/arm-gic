@@ -110,6 +110,8 @@ impl GicV2 {
 
     /// Initialises the GIC.
     pub fn setup(&mut self) {
+        // SAFETY: Both registers `self.gicd` and `self.gicc` are valid and unique pointers to
+        // the hardware interfaces provided by the user.
         unsafe {
             addr_of_mut!((*self.gicd).ctlr).write_volatile(GicdCtlr::EnableGrp1);
             for i in 0..32 {
@@ -126,9 +128,9 @@ impl GicV2 {
         let index = (intid.0 / 32) as usize;
         let bit = 1 << (intid.0 % 32);
 
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-        // GIC distributor interface.
         if enable {
+            // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+            // GIC distributor interface.
             unsafe {
                 addr_of_mut!((*self.gicd).isenabler[index]).write_volatile(bit);
                 if (addr_of!((*self.gicd).isenabler[index]).read_volatile() & bit) == 0 {
@@ -136,6 +138,8 @@ impl GicV2 {
                 }
             }
         } else {
+            // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+            // GIC distributor interface.
             unsafe {
                 addr_of_mut!((*self.gicd).icenabler[index]).write(bit);
             }
@@ -145,13 +149,15 @@ impl GicV2 {
     /// Enables all interrupts.
     pub fn enable_all_interrupts(&mut self, enable: bool) {
         for i in 0..32 {
-            // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
-            // of a GIC distributor interface.
             if enable {
+                // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
+                // of a GIC distributor interface.
                 unsafe {
                     addr_of_mut!((*self.gicd).isenabler[i]).write_volatile(0xffffffff);
                 }
             } else {
+                // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
+                // of a GIC distributor interface.
                 unsafe {
                     addr_of_mut!((*self.gicd).icenabler[i]).write_volatile(0xffffffff);
                 }
@@ -174,10 +180,10 @@ impl GicV2 {
     /// Note that lower numbers correspond to higher priorities; i.e. 0 is the highest priority, and
     /// 255 is the lowest.
     pub fn set_interrupt_priority(&mut self, intid: IntId, priority: u8) {
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-        // GIC distributor interface.
         let idx = intid.0 as usize / 4;
         let priority = (priority as u32) << (8 * (intid.0 % 4));
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
         unsafe {
             addr_of_mut!((*self.gicd).ipriorityr[idx]).write_volatile(priority);
         }
