@@ -1,4 +1,4 @@
-// Copyright 2024 The arm-gic Authors.
+// Copyright 2025 The arm-gic Authors.
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 use bitflags::bitflags;
@@ -11,6 +11,7 @@ bitflags! {
         const EnableGrp0 = 1 << 0;
     }
 }
+
 #[repr(C, align(8))]
 pub struct GICD {
     /// Distributor Control Register

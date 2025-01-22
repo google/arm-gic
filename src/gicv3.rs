@@ -11,11 +11,8 @@ use crate::sysreg::{
     read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen1_el1,
     write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
 };
-use core::{
-    fmt::{self, Debug, Formatter},
-    hint::spin_loop,
-    mem::size_of,
-};
+use crate::{IntId, Trigger};
+use core::{fmt::Debug, hint::spin_loop, mem::size_of};
 use thiserror::Error;
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
@@ -75,172 +72,6 @@ unsafe fn set_bit(registers: *mut [u32], nth: usize) {
 /// pointer for volatile reads and writes.
 unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
     modify_bit(registers, nth, false);
-}
-
-/// An interrupt ID.
-#[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq)]
-pub struct IntId(u32);
-
-impl IntId {
-    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
-    /// S-EL2 or S-EL1.
-    pub const SPECIAL_SECURE: Self = Self(1020);
-
-    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
-    /// (non-secure) EL2 or EL1.
-    pub const SPECIAL_NONSECURE: Self = Self(1021);
-
-    /// Special interrupt ID returned when the interrupt is a non-maskable interrupt.
-    pub const SPECIAL_NMI: Self = Self(1022);
-
-    /// Special interrupt ID returned when there is no pending interrupt of sufficient priority for
-    /// the current security state and interrupt group.
-    pub const SPECIAL_NONE: Self = Self(1023);
-
-    /// The maximum number of SPIs which may be supported.
-    pub const MAX_SPI_COUNT: u32 = Self::SPECIAL_START - Self::SPI_START;
-
-    /// The number of Software Generated Interrupts.
-    pub const SGI_COUNT: u32 = Self::PPI_START - Self::SGI_START;
-
-    /// The number of (non-extended) Private Peripheral Interrupts.
-    pub const PPI_COUNT: u32 = Self::SPI_START - Self::PPI_START;
-
-    /// The maximum number of extended Private Peripheral Interrupts which may be supported.
-    pub const MAX_EPPI_COUNT: u32 = Self::EPPI_END - Self::EPPI_START;
-
-    /// The maximum number of extended Shared Peripheral Interrupts which may be supported.
-    pub const MAX_ESPI_COUNT: u32 = Self::ESPI_END - Self::ESPI_START;
-
-    /// The ID of the first Software Generated Interrupt.
-    const SGI_START: u32 = 0;
-
-    /// The ID of the first Private Peripheral Interrupt.
-    const PPI_START: u32 = 16;
-
-    /// The ID of the first Shared Peripheral Interrupt.
-    const SPI_START: u32 = 32;
-
-    /// The first special interrupt ID.
-    const SPECIAL_START: u32 = 1020;
-
-    /// One more than the last special interrupt ID.
-    const SPECIAL_END: u32 = 1024;
-
-    /// The first extended Private Peripheral Interrupt.
-    const EPPI_START: u32 = 1056;
-
-    /// One more than the last extended Private Peripheral Interrupt.
-    const EPPI_END: u32 = 1120;
-
-    /// The first extended Shared Peripheral Interrupt.
-    const ESPI_START: u32 = 4096;
-
-    /// One more than the last extended Shared Peripheral Interrupt.
-    const ESPI_END: u32 = 5120;
-
-    /// The first Locality-specific Peripheral Interrupt.
-    const LPI_START: u32 = 8192;
-
-    /// Returns the interrupt ID for the given Software Generated Interrupt.
-    pub const fn sgi(sgi: u32) -> Self {
-        assert!(sgi < Self::SGI_COUNT);
-        Self(Self::SGI_START + sgi)
-    }
-
-    /// Returns the interrupt ID for the given Private Peripheral Interrupt.
-    pub const fn ppi(ppi: u32) -> Self {
-        assert!(ppi < Self::PPI_COUNT);
-        Self(Self::PPI_START + ppi)
-    }
-
-    /// Returns the interrupt ID for the given Shared Peripheral Interrupt.
-    pub const fn spi(spi: u32) -> Self {
-        assert!(spi < Self::MAX_SPI_COUNT);
-        Self(Self::SPI_START + spi)
-    }
-
-    /// Returns the interrupt ID for the given extended Private Peripheral Interrupt.
-    pub const fn eppi(eppi: u32) -> Self {
-        assert!(eppi < Self::MAX_EPPI_COUNT);
-        Self(Self::EPPI_START + eppi)
-    }
-
-    /// Returns the interrupt ID for the given extended Shared Peripheral Interrupt.
-    pub const fn espi(espi: u32) -> Self {
-        assert!(espi < Self::MAX_ESPI_COUNT);
-        Self(Self::ESPI_START + espi)
-    }
-
-    /// Returns the interrupt ID for the given Locality-specific Peripheral Interrupt.
-    pub const fn lpi(lpi: u32) -> Self {
-        Self(Self::LPI_START + lpi)
-    }
-
-    /// Returns whether this interrupt ID is for a Software Generated Interrupt.
-    fn is_sgi(self) -> bool {
-        self.0 < Self::PPI_START
-    }
-
-    /// Returns whether this interrupt ID is for a Private Peripheral Interrupt.
-    pub fn is_ppi(self) -> bool {
-        Self::PPI_START <= self.0 && self.0 < Self::SPI_START
-    }
-
-    /// Returns whether this interrupt ID is private to a core, i.e. it is an SGI or PPI.
-    pub fn is_private(self) -> bool {
-        self.is_sgi() || self.is_ppi()
-    }
-
-    /// Returns whether this interrupt ID is for a Shared Peripheral Interrupt.
-    pub fn is_spi(self) -> bool {
-        Self::SPI_START <= self.0 && self.0 < Self::SPECIAL_START
-    }
-
-    /// Returns an array of all interrupt Ids that are private to a core, i.e. SGIs and PPIs.
-    pub fn private() -> impl Iterator<Item = IntId> {
-        let sgis = (0..Self::SGI_COUNT).map(Self::sgi);
-        let ppis = (0..Self::PPI_COUNT).map(Self::ppi);
-
-        sgis.chain(ppis)
-    }
-
-    /// Returns an array of all SPI Ids.
-    pub fn spis() -> impl Iterator<Item = IntId> {
-        (0..Self::MAX_SPI_COUNT).map(Self::spi)
-    }
-}
-
-impl Debug for IntId {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        if self.0 < Self::PPI_START {
-            write!(f, "SGI {}", self.0 - Self::SGI_START)
-        } else if self.0 < Self::SPI_START {
-            write!(f, "PPI {}", self.0 - Self::PPI_START)
-        } else if self.0 < Self::SPECIAL_START {
-            write!(f, "SPI {}", self.0 - Self::SPI_START)
-        } else if self.0 < Self::SPECIAL_END {
-            write!(f, "Special IntId {}", self.0)
-        } else if self.0 < Self::EPPI_START {
-            write!(f, "Reserved IntId {}", self.0)
-        } else if self.0 < Self::EPPI_END {
-            write!(f, "EPPI {}", self.0 - Self::EPPI_START)
-        } else if self.0 < Self::ESPI_START {
-            write!(f, "Reserved IntId {}", self.0)
-        } else if self.0 < Self::ESPI_END {
-            write!(f, "ESPI {}", self.0 - Self::ESPI_START)
-        } else if self.0 < Self::LPI_START {
-            write!(f, "Reserved IntId {}", self.0)
-        } else {
-            write!(f, "LPI {}", self.0 - Self::LPI_START)
-        }
-    }
-}
-
-impl From<IntId> for u32 {
-    fn from(intid: IntId) -> Self {
-        intid.0
-    }
 }
 
 /// Driver for an Arm Generic Interrupt Controller version 3 (or 4).
@@ -608,15 +439,6 @@ unsafe impl Send for GicV3 {}
 
 // SAFETY: Any operations which change state require `&mut GicV3`, so `&GicV3` is fine to share.
 unsafe impl Sync for GicV3 {}
-
-/// The trigger configuration for an interrupt.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Trigger {
-    /// The interrupt is edge triggered.
-    Edge,
-    /// The interrupt is level triggered.
-    Level,
-}
 
 /// The group configuration for an interrupt.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
