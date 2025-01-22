@@ -2,6 +2,8 @@
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
+//! Raw register access for the GICv3.
+
 use bitflags::bitflags;
 
 bitflags! {
@@ -17,6 +19,21 @@ bitflags! {
         const EnableGrp1S = 1 << 2;
         const EnableGrp1NS = 1 << 1;
         const EnableGrp0 = 1 << 0;
+    }
+}
+
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    pub struct GicrCtlr: u32 {
+        const UWP = 1 << 31;
+        const DPG1S = 1 << 26;
+        const DPG1NS = 1 << 25;
+        const DPG0 = 1 << 24;
+        const RWP = 1 << 3;
+        const IR = 1 << 2;
+        const CES = 1 << 1;
+        const EnableLPIs = 1 << 0;
     }
 }
 
@@ -121,10 +138,10 @@ pub struct GICD {
     pub inmr_e: [u32; 32],
     _reserved19: [u32; 2400],
     /// Interrupt routing registers.
-    pub irouter: [u32; 1975],
-    _reserved20: [u32; 9],
+    pub irouter: [u64; 988],
+    _reserved20: [u32; 8],
     /// Interrupt routing registers for extended SPI range.
-    pub irouter_e: [u32; 2048],
+    pub irouter_e: [u64; 1024],
     _reserved21: [u32; 2048],
     /// Implementation defined registers.
     pub implementation_defined2: [u32; 4084],
@@ -146,7 +163,7 @@ bitflags! {
 #[repr(C, align(8))]
 pub struct GICR {
     /// Redistributor control register.
-    pub ctlr: u32,
+    pub ctlr: GicrCtlr,
     /// Implementer identification register.
     pub iidr: u32,
     /// Redistributor type register.

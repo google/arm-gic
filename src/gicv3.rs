@@ -4,25 +4,114 @@
 
 //! Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 
-mod registers;
+pub mod registers;
 
-use self::registers::{GicdCtlr, Waker, GICD, GICR, SGI};
-use crate::sysreg::{read_sysreg, write_sysreg};
+use self::registers::{GicdCtlr, GicrCtlr, Waker, GICD, GICR, SGI};
+use crate::sysreg::{
+    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen1_el1,
+    write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
+};
 use core::{
     fmt::{self, Debug, Formatter},
     hint::spin_loop,
     mem::size_of,
-    ptr::{addr_of, addr_of_mut},
 };
+use thiserror::Error;
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
+
+#[derive(Error, Debug, Clone, Copy, Eq, PartialEq)]
+pub enum GICRError {
+    #[error("Redistributor has already been notified that the connected core is awake")]
+    AlreadyAwake,
+}
+
+/// Modifies `nth` bit of memory pointed by `registers`.
+///
+/// # Safety
+///
+/// The caller must ensure that `registers` is a valid
+/// pointer for volatile reads and writes
+unsafe fn modify_bit(registers: *mut [u32], nth: usize, set_bit: bool) {
+    let reg_num: usize = nth / 32;
+    assert!(reg_num < registers.len());
+
+    let bit_num: usize = nth % 32;
+    let bit_mask: u32 = 1 << bit_num;
+
+    // SAFETY: `registers` is guaranteed to be
+    // a valid pointer for volatile reads and writes
+    // and `reg_num` does not exceed `*registers` length.
+    unsafe {
+        let reg_ptr = &raw mut (*registers)[reg_num];
+        let old_value = reg_ptr.read_volatile();
+
+        let new_value: u32 = if set_bit {
+            old_value | bit_mask
+        } else {
+            old_value & !bit_mask
+        };
+
+        reg_ptr.write_volatile(new_value);
+    }
+}
+
+/// Sets `nth` bit of memory pointed by `registers`.
+///
+/// # Safety
+///
+/// The caller must ensure that `registers` is a valid
+/// pointer for volatile reads and writes.
+unsafe fn set_bit(registers: *mut [u32], nth: usize) {
+    modify_bit(registers, nth, true);
+}
+
+/// Clears `nth` bit of memory pointed by `registers`.
+///
+/// # Safety
+///
+/// The caller must ensure that `registers` is a valid
+/// pointer for volatile reads and writes.
+unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
+    modify_bit(registers, nth, false);
+}
 
 /// An interrupt ID.
 #[derive(Copy, Clone, Eq, Ord, PartialOrd, PartialEq)]
 pub struct IntId(u32);
 
 impl IntId {
+    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
+    /// S-EL2 or S-EL1.
+    pub const SPECIAL_SECURE: Self = Self(1020);
+
+    /// Special interrupt ID returned when running at EL3 and the interrupt should be handled at
+    /// (non-secure) EL2 or EL1.
+    pub const SPECIAL_NONSECURE: Self = Self(1021);
+
+    /// Special interrupt ID returned when the interrupt is a non-maskable interrupt.
+    pub const SPECIAL_NMI: Self = Self(1022);
+
+    /// Special interrupt ID returned when there is no pending interrupt of sufficient priority for
+    /// the current security state and interrupt group.
+    pub const SPECIAL_NONE: Self = Self(1023);
+
+    /// The maximum number of SPIs which may be supported.
+    pub const MAX_SPI_COUNT: u32 = Self::SPECIAL_START - Self::SPI_START;
+
+    /// The number of Software Generated Interrupts.
+    pub const SGI_COUNT: u32 = Self::PPI_START - Self::SGI_START;
+
+    /// The number of (non-extended) Private Peripheral Interrupts.
+    pub const PPI_COUNT: u32 = Self::SPI_START - Self::PPI_START;
+
+    /// The maximum number of extended Private Peripheral Interrupts which may be supported.
+    pub const MAX_EPPI_COUNT: u32 = Self::EPPI_END - Self::EPPI_START;
+
+    /// The maximum number of extended Shared Peripheral Interrupts which may be supported.
+    pub const MAX_ESPI_COUNT: u32 = Self::ESPI_END - Self::ESPI_START;
+
     /// The ID of the first Software Generated Interrupt.
     const SGI_START: u32 = 0;
 
@@ -35,22 +124,57 @@ impl IntId {
     /// The first special interrupt ID.
     const SPECIAL_START: u32 = 1020;
 
+    /// One more than the last special interrupt ID.
+    const SPECIAL_END: u32 = 1024;
+
+    /// The first extended Private Peripheral Interrupt.
+    const EPPI_START: u32 = 1056;
+
+    /// One more than the last extended Private Peripheral Interrupt.
+    const EPPI_END: u32 = 1120;
+
+    /// The first extended Shared Peripheral Interrupt.
+    const ESPI_START: u32 = 4096;
+
+    /// One more than the last extended Shared Peripheral Interrupt.
+    const ESPI_END: u32 = 5120;
+
+    /// The first Locality-specific Peripheral Interrupt.
+    const LPI_START: u32 = 8192;
+
     /// Returns the interrupt ID for the given Software Generated Interrupt.
     pub const fn sgi(sgi: u32) -> Self {
-        assert!(sgi < Self::PPI_START);
+        assert!(sgi < Self::SGI_COUNT);
         Self(Self::SGI_START + sgi)
     }
 
     /// Returns the interrupt ID for the given Private Peripheral Interrupt.
     pub const fn ppi(ppi: u32) -> Self {
-        assert!(ppi < Self::SPI_START - Self::PPI_START);
+        assert!(ppi < Self::PPI_COUNT);
         Self(Self::PPI_START + ppi)
     }
 
     /// Returns the interrupt ID for the given Shared Peripheral Interrupt.
     pub const fn spi(spi: u32) -> Self {
-        assert!(spi < Self::SPECIAL_START - Self::SPI_START);
+        assert!(spi < Self::MAX_SPI_COUNT);
         Self(Self::SPI_START + spi)
+    }
+
+    /// Returns the interrupt ID for the given extended Private Peripheral Interrupt.
+    pub const fn eppi(eppi: u32) -> Self {
+        assert!(eppi < Self::MAX_EPPI_COUNT);
+        Self(Self::EPPI_START + eppi)
+    }
+
+    /// Returns the interrupt ID for the given extended Shared Peripheral Interrupt.
+    pub const fn espi(espi: u32) -> Self {
+        assert!(espi < Self::MAX_ESPI_COUNT);
+        Self(Self::ESPI_START + espi)
+    }
+
+    /// Returns the interrupt ID for the given Locality-specific Peripheral Interrupt.
+    pub const fn lpi(lpi: u32) -> Self {
+        Self(Self::LPI_START + lpi)
     }
 
     /// Returns whether this interrupt ID is for a Software Generated Interrupt.
@@ -58,9 +182,32 @@ impl IntId {
         self.0 < Self::PPI_START
     }
 
+    /// Returns whether this interrupt ID is for a Private Peripheral Interrupt.
+    pub fn is_ppi(self) -> bool {
+        Self::PPI_START <= self.0 && self.0 < Self::SPI_START
+    }
+
     /// Returns whether this interrupt ID is private to a core, i.e. it is an SGI or PPI.
-    fn is_private(self) -> bool {
-        self.0 < Self::SPI_START
+    pub fn is_private(self) -> bool {
+        self.is_sgi() || self.is_ppi()
+    }
+
+    /// Returns whether this interrupt ID is for a Shared Peripheral Interrupt.
+    pub fn is_spi(self) -> bool {
+        Self::SPI_START <= self.0 && self.0 < Self::SPECIAL_START
+    }
+
+    /// Returns an array of all interrupt Ids that are private to a core, i.e. SGIs and PPIs.
+    pub fn private() -> impl Iterator<Item = IntId> {
+        let sgis = (0..Self::SGI_COUNT).map(Self::sgi);
+        let ppis = (0..Self::PPI_COUNT).map(Self::ppi);
+
+        sgis.chain(ppis)
+    }
+
+    /// Returns an array of all SPI Ids.
+    pub fn spis() -> impl Iterator<Item = IntId> {
+        (0..Self::MAX_SPI_COUNT).map(Self::spi)
     }
 }
 
@@ -72,8 +219,20 @@ impl Debug for IntId {
             write!(f, "PPI {}", self.0 - Self::PPI_START)
         } else if self.0 < Self::SPECIAL_START {
             write!(f, "SPI {}", self.0 - Self::SPI_START)
-        } else {
+        } else if self.0 < Self::SPECIAL_END {
             write!(f, "Special IntId {}", self.0)
+        } else if self.0 < Self::EPPI_START {
+            write!(f, "Reserved IntId {}", self.0)
+        } else if self.0 < Self::EPPI_END {
+            write!(f, "EPPI {}", self.0 - Self::EPPI_START)
+        } else if self.0 < Self::ESPI_START {
+            write!(f, "Reserved IntId {}", self.0)
+        } else if self.0 < Self::ESPI_END {
+            write!(f, "ESPI {}", self.0 - Self::ESPI_START)
+        } else if self.0 < Self::LPI_START {
+            write!(f, "Reserved IntId {}", self.0)
+        } else {
+            write!(f, "LPI {}", self.0 - Self::LPI_START)
         }
     }
 }
@@ -112,21 +271,18 @@ impl GicV3 {
 
     /// Initialises the GIC.
     pub fn setup(&mut self) {
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            // Enable system register access.
-            write_sysreg!(icc_sre_el1, 0x01);
-        }
+        // Enable system register access.
+        write_icc_sre_el1(0x01);
 
         // SAFETY: We know that `self.gicr` is a valid and unique pointer to the registers of a
         // GIC redistributor interface.
         unsafe {
             // Mark this CPU core as awake, and wait until the GIC wakes up before continuing.
-            let mut waker = addr_of!((*self.gicr).waker).read_volatile();
+            let mut waker = (&raw const (*self.gicr).waker).read_volatile();
             waker -= Waker::PROCESSOR_SLEEP;
-            addr_of_mut!((*self.gicr).waker).write_volatile(waker);
+            (&raw mut (*self.gicr).waker).write_volatile(waker);
 
-            while addr_of!((*self.gicr).waker)
+            while (&raw const (*self.gicr).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {
@@ -134,20 +290,16 @@ impl GicV3 {
             }
         }
 
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write
-            // to an EOI register to also deactivate the interrupt, and configure preemption groups
-            // for group 0 and group 1 interrupts separately.
-            write_sysreg!(icc_ctlr_el1, 0);
-        }
+        // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write to
+        // an EOI register to also deactivate the interrupt, and configure preemption groups for
+        // group 0 and group 1 interrupts separately.
+        write_icc_ctlr_el1(0);
 
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface.
         unsafe {
             // Enable affinity routing and non-secure group 1 interrupts.
-            addr_of_mut!((*self.gicd).ctlr)
-                .write_volatile(GicdCtlr::ARE_S | GicdCtlr::EnableGrp1NS);
+            (&raw mut (*self.gicd).ctlr).write_volatile(GicdCtlr::ARE_S | GicdCtlr::EnableGrp1NS);
         }
 
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
@@ -155,18 +307,15 @@ impl GicV3 {
         // redistributor interface.
         unsafe {
             // Put all SGIs and PPIs into non-secure group 1.
-            addr_of_mut!((*self.sgi).igroupr0).write_volatile(0xffffffff);
+            (&raw mut (*self.sgi).igroupr0).write_volatile(0xffffffff);
             // Put all SPIs into non-secure group 1.
-            for i in 0..32 {
-                addr_of_mut!((*self.gicd).igroupr[i]).write_volatile(0xffffffff);
+            for i in 1..32 {
+                (&raw mut (*self.gicd).igroupr[i]).write_volatile(0xffffffff);
             }
         }
 
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            // Enable non-secure group 1.
-            write_sysreg!(icc_igrpen1_el1, 0x00000001);
-        }
+        // Enable non-secure group 1.
+        write_icc_igrpen1_el1(0x00000001);
     }
 
     /// Enables or disables the interrupt with the given ID.
@@ -179,14 +328,14 @@ impl GicV3 {
         // redistributor interface.
         unsafe {
             if enable {
-                addr_of_mut!((*self.gicd).isenabler[index]).write_volatile(bit);
+                (&raw mut (*self.gicd).isenabler[index]).write_volatile(bit);
                 if intid.is_private() {
-                    addr_of_mut!((*self.sgi).isenabler0).write_volatile(bit);
+                    (&raw mut (*self.sgi).isenabler0).write_volatile(bit);
                 }
             } else {
-                addr_of_mut!((*self.gicd).icenabler[index]).write_volatile(bit);
+                (&raw mut (*self.gicd).icenabler[index]).write_volatile(bit);
                 if intid.is_private() {
-                    addr_of_mut!((*self.sgi).icenabler0).write_volatile(bit);
+                    (&raw mut (*self.sgi).icenabler0).write_volatile(bit);
                 }
             }
         }
@@ -199,9 +348,9 @@ impl GicV3 {
             // of a GIC distributor interface.
             unsafe {
                 if enable {
-                    addr_of_mut!((*self.gicd).isenabler[i]).write_volatile(0xffffffff);
+                    (&raw mut (*self.gicd).isenabler[i]).write_volatile(0xffffffff);
                 } else {
-                    addr_of_mut!((*self.gicd).icenabler[i]).write_volatile(0xffffffff);
+                    (&raw mut (*self.gicd).icenabler[i]).write_volatile(0xffffffff);
                 }
             }
         }
@@ -209,9 +358,9 @@ impl GicV3 {
         // registers of a GIC redistributor interface.
         unsafe {
             if enable {
-                addr_of_mut!((*self.sgi).isenabler0).write_volatile(0xffffffff);
+                (&raw mut (*self.sgi).isenabler0).write_volatile(0xffffffff);
             } else {
-                addr_of_mut!((*self.sgi).icenabler0).write_volatile(0xffffffff);
+                (&raw mut (*self.sgi).icenabler0).write_volatile(0xffffffff);
             }
         }
     }
@@ -220,10 +369,7 @@ impl GicV3 {
     ///
     /// Only interrupts with a higher priority (numerically lower) will be signalled.
     pub fn set_priority_mask(min_priority: u8) {
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            write_sysreg!(icc_pmr_el1, min_priority.into());
-        }
+        write_icc_pmr_el1(min_priority.into());
     }
 
     /// Sets the priority of the interrupt with the given ID.
@@ -237,9 +383,9 @@ impl GicV3 {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             if intid.is_private() {
-                addr_of_mut!((*self.sgi).ipriorityr[intid.0 as usize]).write_volatile(priority);
+                (&raw mut (*self.sgi).ipriorityr[intid.0 as usize]).write_volatile(priority);
             } else {
-                addr_of_mut!((*self.gicd).ipriorityr[intid.0 as usize]).write_volatile(priority);
+                (&raw mut (*self.gicd).ipriorityr[intid.0 as usize]).write_volatile(priority);
             }
         }
     }
@@ -255,15 +401,53 @@ impl GicV3 {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             let register = if intid.is_private() {
-                addr_of_mut!((*self.sgi).icfgr[index])
+                (&raw mut (*self.sgi).icfgr[index])
             } else {
-                addr_of_mut!((*self.gicd).icfgr[index])
+                (&raw mut (*self.gicd).icfgr[index])
             };
             let v = register.read_volatile();
             register.write_volatile(match trigger {
                 Trigger::Edge => v | bit,
                 Trigger::Level => v & !bit,
             });
+        }
+    }
+
+    /// Assigns the interrupt with id `intid` to interrupt group `group`.
+    pub fn set_group(&mut self, intid: IntId, group: Group) {
+        // FIXME: For now we assume that we are running a single-core system.
+        // so there's just one GICR frame and one SGI configuration.
+
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
+        // redistributor interface.
+        let (igroupr, igrpmodr): (*mut [u32], *mut [u32]) = unsafe {
+            if intid.is_private() {
+                (
+                    &raw mut (*self.sgi).igroupr0 as *mut [u32; 1],
+                    &raw mut (*self.sgi).igrpmodr0 as *mut [u32; 1],
+                )
+            } else {
+                (
+                    &raw mut (*self.gicd).igroupr,
+                    &raw mut (*self.gicd).igrpmodr,
+                )
+            }
+        };
+
+        // SAFETY: We know that `igroupr` and `igrpmodr` are valid and unique pointers
+        // to the registers of GIC distributor or redistributor interface.
+        unsafe {
+            if let Group::Secure(sg) = group {
+                clear_bit(igroupr, intid.0 as usize);
+                match sg {
+                    SecureIntGroup::Group1S => set_bit(igrpmodr, intid.0 as usize),
+                    SecureIntGroup::Group0 => clear_bit(igrpmodr, intid.0 as usize),
+                }
+            } else {
+                set_bit(igroupr, intid.0 as usize);
+                clear_bit(igrpmodr, intid.0 as usize);
+            }
         }
     }
 
@@ -292,18 +476,14 @@ impl GicV3 {
             }
         };
 
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe {
-            write_sysreg!(icc_sgi1r_el1, sgi_value);
-        }
+        write_icc_sgi1r_el1(sgi_value);
     }
 
     /// Gets the ID of the highest priority signalled interrupt, and acknowledges it.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt() -> Option<IntId> {
-        // SAFETY: Reading this system register doesn't access memory in any way.
-        let intid = unsafe { read_sysreg!(icc_iar1_el1) } as u32;
+        let intid = read_icc_iar1_el1() as u32;
         if intid == IntId::SPECIAL_START {
             None
         } else {
@@ -314,8 +494,112 @@ impl GicV3 {
     /// Informs the interrupt controller that the CPU has completed processing the given interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
     pub fn end_interrupt(intid: IntId) {
-        // SAFETY: Writing to this system register doesn't access memory in any way.
-        unsafe { write_sysreg!(icc_eoir1_el1, intid.0.into()) }
+        write_icc_eoir1_el1(intid.0.into())
+    }
+
+    /// Returns a raw pointer to the GIC distributor registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn gicd_ptr(&mut self) -> *mut GICD {
+        self.gicd
+    }
+
+    /// Returns a raw pointer to the GIC redistributor registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn gicr_ptr(&mut self) -> *mut GICR {
+        self.gicr
+    }
+
+    /// Returns a raw pointer to the GIC redistributor SGI and PPI registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn sgi_ptr(&mut self) -> *mut SGI {
+        self.sgi
+    }
+
+    fn gicd_barrier(&mut self) {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
+        unsafe {
+            while (&raw const (*self.gicd).ctlr)
+                .read_volatile()
+                .contains(GicdCtlr::RWP)
+            {}
+        }
+    }
+
+    fn gicd_modify_control(&mut self, f: impl FnOnce(GicdCtlr) -> GicdCtlr) {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
+        // GIC distributor interface.
+        unsafe {
+            let gicd_ctlr = (&raw mut (*self.gicd).ctlr).read_volatile();
+
+            (&raw mut (*self.gicd).ctlr).write_volatile(f(gicd_ctlr));
+        }
+
+        self.gicd_barrier();
+    }
+
+    /// Clears specified bits in GIC distributor control register.
+    pub fn gicd_clear_control(&mut self, flags: GicdCtlr) {
+        self.gicd_modify_control(|old| old - flags);
+    }
+
+    /// Sets specified bits in GIC distributor control register.
+    pub fn gicd_set_control(&mut self, flags: GicdCtlr) {
+        self.gicd_modify_control(|old| old | flags);
+    }
+
+    /// Blocks until register write for the current Security state is no longer in progress.
+    pub fn gicr_barrier(&mut self) {
+        // FIXME: For now we assume that we are running a single-core system.
+        // so there's just one GICR frame and one SGI configuration.
+
+        // SAFETY: We know that `self.sgi` is a valid and unique pointer to the SGI and PPI
+        // registers of a GIC redistributor interface.
+        unsafe {
+            while (&raw const (*self.gicr).ctlr)
+                .read_volatile()
+                .contains(GicrCtlr::RWP)
+            {}
+        }
+    }
+
+    /// Informs GIC redistributor that the core has awakened.
+    /// Blocks until `GICR_WAKER.ChildrenAsleep` is cleared.
+    pub fn redistributor_mark_core_awake(&mut self) -> Result<(), GICRError> {
+        // FIXME: For now we assume that we are running a single-core system.
+        // so there's just one GICR frame and one SGI configuration.
+
+        // SAFETY: We know that `self.gicr` is a valid and unique pointer to
+        // the GIC redistributor interface.
+        unsafe {
+            let mut gicr_waker = (&raw mut (*self.gicr).waker).read_volatile();
+
+            /*
+             * The WAKER_PS_BIT should be changed to 0
+             * only when WAKER_CA_BIT is 1.
+             */
+            if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
+                return Err(GICRError::AlreadyAwake);
+            }
+
+            /* Mark the connected core as awake */
+            gicr_waker -= Waker::PROCESSOR_SLEEP;
+            (&raw mut (*self.gicr).waker).write_volatile(gicr_waker);
+
+            // Wait till the WAKER_CA_BIT changes to 0.
+            while (&raw mut (*self.gicr).waker)
+                .read_volatile()
+                .contains(Waker::CHILDREN_ASLEEP)
+            {}
+
+            Ok(())
+        }
     }
 }
 
@@ -332,6 +616,22 @@ pub enum Trigger {
     Edge,
     /// The interrupt is level triggered.
     Level,
+}
+
+/// The group configuration for an interrupt.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Group {
+    Secure(SecureIntGroup),
+    Group1NS,
+}
+
+/// The group configuration for an interrupt.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SecureIntGroup {
+    /// The interrupt belongs to Secure Group 1.
+    Group1S,
+    /// The interrupt belongs to Group 0.
+    Group0,
 }
 
 /// The target specification for a software-generated interrupt.
