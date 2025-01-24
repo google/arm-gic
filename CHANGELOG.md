@@ -10,6 +10,7 @@
 
 - Added more interrupt types to `IntId`, and public constants for number of each type.
 - Added constants to `IntId` for special interrupt IDs.
+- Added methods to read type register and its fields.
 
 ## 0.1.2
 
