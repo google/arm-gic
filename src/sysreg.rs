@@ -55,6 +55,7 @@ read_sysreg!(icc_iar1_el1, read_icc_iar1_el1);
 
 write_sysreg!(icc_ctlr_el1, write_icc_ctlr_el1);
 write_sysreg!(icc_eoir1_el1, write_icc_eoir1_el1);
+write_sysreg!(icc_igrpen0_el1, write_icc_igrpen0_el1);
 write_sysreg!(icc_igrpen1_el1, write_icc_igrpen1_el1);
 write_sysreg!(icc_pmr_el1, write_icc_pmr_el1);
 write_sysreg!(icc_sgi1r_el1, write_icc_sgi1r_el1);

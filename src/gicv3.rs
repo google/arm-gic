@@ -8,8 +8,8 @@ pub mod registers;
 
 use self::registers::{GicdCtlr, GicrCtlr, Waker, GICD, GICR, SGI};
 use crate::sysreg::{
-    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen1_el1,
-    write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
+    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen0_el1,
+    write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
 };
 use crate::{IntId, Trigger};
 use core::hint::spin_loop;
@@ -152,6 +152,11 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
 
         // Enable group 1 for the current security state.
         Self::enable_group1(true);
+    }
+
+    /// Enables or disables group 0 interrupts.
+    pub fn enable_group0(enable: bool) {
+        write_icc_igrpen0_el1(if enable { 0x01 } else { 0x00 });
     }
 
     /// Enables or disables group 1 interrupts for the current security state.
