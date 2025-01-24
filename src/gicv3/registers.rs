@@ -46,7 +46,7 @@ pub struct Typer(u32);
 
 impl Typer {
     /// Returns the value of the ESPI_range field.
-    pub fn espi_range(self) -> u32 {
+    fn espi_range(self) -> u32 {
         self.0 >> 27
     }
 
@@ -80,7 +80,7 @@ impl Typer {
     }
 
     /// Returns whether Direct Virtual LPI injection is supported.
-    pub fn dvis_supported(self) -> bool {
+    pub fn dvi_supported(self) -> bool {
         self.0 & (1 << 18) != 0
     }
 
@@ -105,7 +105,7 @@ impl Typer {
     }
 
     /// Returns whether the GIC supports two security states.
-    pub fn security_extn(self) -> bool {
+    pub fn has_security_extension(self) -> bool {
         self.0 & (1 << 10) != 0
     }
 
