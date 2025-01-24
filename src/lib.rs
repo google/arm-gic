@@ -15,7 +15,7 @@
 //!     irq_enable,
 //! };
 //!
-//! // Base addresses of the GICv3 distributor and controller.
+//! // Base addresses of the GICv3 distributor and redistributor.
 //! const GICD_BASE_ADDRESS: *mut u64 = 0x800_0000 as _;
 //! const GICR_BASE_ADDRESS: *mut u64 = 0x80A_0000 as _;
 //!
