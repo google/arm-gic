@@ -40,17 +40,16 @@
 //! );
 //! ```
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 pub mod gicv2;
 pub mod gicv3;
 mod sysreg;
 
-use core::{
-    arch::asm,
-    fmt::{Debug, Formatter, Result},
-};
+#[cfg(target_arch = "aarch64")]
+use core::arch::asm;
+use core::fmt::{Debug, Formatter, Result};
 
 /// The trigger configuration for an interrupt.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -228,6 +227,7 @@ impl From<IntId> for u32 {
 }
 
 /// Disables debug, SError, IRQ and FIQ exceptions.
+#[cfg(target_arch = "aarch64")]
 pub fn irq_disable() {
     // SAFETY: Writing to this system register doesn't access memory in any way.
     unsafe {
@@ -236,6 +236,7 @@ pub fn irq_disable() {
 }
 
 /// Enables debug, SError, IRQ and FIQ exceptions.
+#[cfg(target_arch = "aarch64")]
 pub fn irq_enable() {
     // SAFETY: Writing to this system register doesn't access memory in any way.
     unsafe {
@@ -244,6 +245,7 @@ pub fn irq_enable() {
 }
 
 /// Waits for an interrupt.
+#[cfg(target_arch = "aarch64")]
 pub fn wfi() {
     // SAFETY: This doesn't access memory in any way.
     unsafe {
