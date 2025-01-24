@@ -100,8 +100,17 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         }
     }
 
-    /// Initialises the GIC and marks the given CPU core as awake.
-    pub fn setup(&mut self, cpu: usize) {
+    /// Enables system register access, marks the given CPU core as awake, and sets some basic
+    /// configuration.
+    ///
+    /// `cpu` should be the linear index of the CPU core as used by the GIC redistributor.
+    ///
+    /// If the core is already marked as awake this will not return any error.
+    ///
+    /// This disables the use of `ICC_PMR_EL1` as a hint for interrupt distribution, configures a
+    /// write to an EOI register to also deactivate the interrupt, and configures preemption groups
+    /// for group 0 and group 1 interrupts separately.
+    pub fn init_cpu(&mut self, cpu: usize) {
         // Enable system register access.
         write_icc_sre_el1(0x01);
 
@@ -112,6 +121,13 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         // an EOI register to also deactivate the interrupt, and configure preemption groups for
         // group 0 and group 1 interrupts separately.
         write_icc_ctlr_el1(0);
+    }
+
+    /// Initialises the GIC and marks the given CPU core as awake.
+    ///
+    /// `cpu` should be the linear index of the CPU core as used by the GIC redistributor.
+    pub fn setup(&mut self, cpu: usize) {
+        self.init_cpu(cpu);
 
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface.
@@ -134,8 +150,13 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
             }
         }
 
-        // Enable non-secure group 1.
-        write_icc_igrpen1_el1(0x00000001);
+        // Enable group 1 for the current security state.
+        Self::enable_group1(true);
+    }
+
+    /// Enables or disables group 1 interrupts for the current security state.
+    pub fn enable_group1(enable: bool) {
+        write_icc_igrpen1_el1(if enable { 0x01 } else { 0x00 });
     }
 
     /// Enables or disables the interrupt with the given ID.
