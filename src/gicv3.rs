@@ -12,13 +12,14 @@ use crate::sysreg::{
     write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
 };
 use crate::{IntId, Trigger};
-use core::{fmt::Debug, hint::spin_loop, mem::size_of};
+use core::hint::spin_loop;
 use registers::Typer;
 use thiserror::Error;
 
 /// The offset in bytes from `RD_base` to `SGI_base`.
 const SGI_OFFSET: usize = 0x10000;
 
+/// An error which may be returned from operations on a GIC Redistributor.
 #[derive(Error, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum GICRError {
     #[error("Redistributor has already been notified that the connected core is awake")]
@@ -29,11 +30,9 @@ pub enum GICRError {
 ///
 /// # Safety
 ///
-/// The caller must ensure that `registers` is a valid
-/// pointer for volatile reads and writes
+/// The caller must ensure that `registers` is a valid pointer for volatile reads and writes.
 unsafe fn modify_bit(registers: *mut [u32], nth: usize, set_bit: bool) {
     let reg_num: usize = nth / 32;
-    assert!(reg_num < registers.len());
 
     let bit_num: usize = nth % 32;
     let bit_mask: u32 = 1 << bit_num;
@@ -97,7 +96,7 @@ impl GicV3 {
         Self {
             gicd: gicd as _,
             gicr: gicr as _,
-            sgi: gicr.wrapping_add(SGI_OFFSET / size_of::<u64>()) as _,
+            sgi: gicr.wrapping_byte_add(SGI_OFFSET) as _,
         }
     }
 
@@ -106,21 +105,8 @@ impl GicV3 {
         // Enable system register access.
         write_icc_sre_el1(0x01);
 
-        // SAFETY: We know that `self.gicr` is a valid and unique pointer to the registers of a
-        // GIC redistributor interface.
-        unsafe {
-            // Mark this CPU core as awake, and wait until the GIC wakes up before continuing.
-            let mut waker = (&raw const (*self.gicr).waker).read_volatile();
-            waker -= Waker::PROCESSOR_SLEEP;
-            (&raw mut (*self.gicr).waker).write_volatile(waker);
-
-            while (&raw const (*self.gicr).waker)
-                .read_volatile()
-                .contains(Waker::CHILDREN_ASLEEP)
-            {
-                spin_loop();
-            }
-        }
+        // Ignore error in case core is already awake.
+        let _ = self.redistributor_mark_core_awake();
 
         // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write to
         // an EOI register to also deactivate the interrupt, and configure preemption groups for
@@ -408,7 +394,8 @@ impl GicV3 {
         }
     }
 
-    /// Informs GIC redistributor that the core has awakened.
+    /// Informs the GIC redistributor that the core has awakened.
+    ///
     /// Blocks until `GICR_WAKER.ChildrenAsleep` is cleared.
     pub fn redistributor_mark_core_awake(&mut self) -> Result<(), GICRError> {
         // FIXME: For now we assume that we are running a single-core system.
@@ -417,25 +404,24 @@ impl GicV3 {
         // SAFETY: We know that `self.gicr` is a valid and unique pointer to
         // the GIC redistributor interface.
         unsafe {
-            let mut gicr_waker = (&raw mut (*self.gicr).waker).read_volatile();
+            let mut gicr_waker = (&raw const (*self.gicr).waker).read_volatile();
 
-            /*
-             * The WAKER_PS_BIT should be changed to 0
-             * only when WAKER_CA_BIT is 1.
-             */
+            // The WAKER_PS_BIT should be changed to 0 only when WAKER_CA_BIT is 1.
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
                 return Err(GICRError::AlreadyAwake);
             }
 
-            /* Mark the connected core as awake */
+            // Mark the connected core as awake.
             gicr_waker -= Waker::PROCESSOR_SLEEP;
             (&raw mut (*self.gicr).waker).write_volatile(gicr_waker);
 
             // Wait till the WAKER_CA_BIT changes to 0.
-            while (&raw mut (*self.gicr).waker)
+            while (&raw const (*self.gicr).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
-            {}
+            {
+                spin_loop();
+            }
 
             Ok(())
         }
