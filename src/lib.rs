@@ -9,10 +9,12 @@
 //!
 //! # Example
 //!
+//! Using a GICv3 on a single-core aarch64 system:
+//!
 //! ```
 //! use arm_gic::{
-//!     gicv3::{GicV3, IntId, SgiTarget},
-//!     irq_enable,
+//!     gicv3::{GicV3, SgiTarget},
+//!     irq_enable, IntId,
 //! };
 //!
 //! // Base addresses of the GICv3 distributor and redistributor.
@@ -20,16 +22,16 @@
 //! const GICR_BASE_ADDRESS: *mut u64 = 0x80A_0000 as _;
 //!
 //! // Initialise the GIC.
-//! let mut gic = unsafe { GicV3::new(GICD_BASE_ADDRESS, GICR_BASE_ADDRESS) };
-//! gic.setup();
+//! let mut gic = unsafe { GicV3::new(GICD_BASE_ADDRESS, [GICR_BASE_ADDRESS]) };
+//! gic.setup(0);
 //!
 //! // Configure an SGI and then send it to ourself.
 //! let sgi_intid = IntId::sgi(3);
-//! GicV3::set_priority_mask(0xff);
-//! gic.set_interrupt_priority(sgi_intid, 0x80);
-//! gic.enable_interrupt(sgi_intid, true);
+//! GicV3::<1>::set_priority_mask(0xff);
+//! gic.set_interrupt_priority(sgi_intid, Some(0), 0x80);
+//! gic.enable_interrupt(sgi_intid, Some(0), true);
 //! irq_enable();
-//! GicV3::send_sgi(
+//! GicV3::<1>::send_sgi(
 //!     sgi_intid,
 //!     SgiTarget::List {
 //!         affinity3: 0,
