@@ -39,7 +39,7 @@ impl SystemRegisters {
 
 /// Generates a public function named `$function_name` to read the fake system register `$sysreg`.
 macro_rules! read_sysreg32 {
-    ($sysreg:ident, $function_name:ident) => {
+    ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident) => {
         pub fn $function_name() -> u32 {
             crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg as u32
         }
@@ -49,7 +49,7 @@ macro_rules! read_sysreg32 {
 /// Generates a public function named `$function_name` to write to the fake system register
 /// `$sysreg`.
 macro_rules! write_sysreg32 {
-    ($sysreg:ident, $function_name:ident) => {
+    ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident) => {
         pub fn $function_name(value: u32) {
             crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value as u64;
         }
@@ -59,7 +59,7 @@ macro_rules! write_sysreg32 {
 /// Generates a public function named `$function_name` to write to the fake system register
 /// `$sysreg`.
 macro_rules! write_sysreg64 {
-    ($sysreg:ident, $function_name:ident) => {
+    ($sysreg:ident, $opc1:literal, $crm:ident, $function_name:ident) => {
         pub fn $function_name(value: u64) {
             crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
         }
