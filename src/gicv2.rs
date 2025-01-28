@@ -181,7 +181,7 @@ impl GicV2 {
         unsafe {
             intid = (&raw mut (*self.gicc).aiar).read_volatile() as u32;
         }
-        if intid == IntId::SPECIAL_START {
+        if IntId(intid) == IntId::SPECIAL_NONE {
             None
         } else {
             Some(IntId(intid))
