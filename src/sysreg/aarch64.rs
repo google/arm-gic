@@ -2,13 +2,13 @@
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
-/// Generates a safe public function named `$function_name` to read the system register `$sysreg`.
+/// Generates a safe public function named `$function_name` to read the 32-bit system register `$sysreg`.
 ///
 /// This should only be used for system registers which are indeed safe to read.
-macro_rules! read_sysreg {
+macro_rules! read_sysreg32 {
     ($sysreg:ident, $function_name:ident) => {
-        pub fn $function_name() -> u64 {
-            let value;
+        pub fn $function_name() -> u32 {
+            let value:u64 ;
             // SAFETY: The caller of the macro guarantees that this system register is safe to read.
             unsafe {
                 core::arch::asm!(
@@ -17,16 +17,36 @@ macro_rules! read_sysreg {
                     value = out(reg) value,
                 );
             }
-            value
+            value as u32
         }
     };
 }
 
-/// Generates a safe public function named `$function_name` to write to the system register
+/// Generates a safe public function named `$function_name` to write to the 32-bit system register
 /// `$sysreg`.
 ///
 /// This should only be used for system registers which are indeed safe to write.
-macro_rules! write_sysreg {
+macro_rules! write_sysreg32 {
+    ($sysreg:ident, $function_name:ident) => {
+        pub fn $function_name(value: u32) {
+            // SAFETY: The caller of the macro guarantees that this system register is safe to
+            // write.
+            unsafe {
+                core::arch::asm!(
+                    concat!("msr ", stringify!($sysreg), ", {value}"),
+                    options(nostack),
+                    value = in(reg) value as u64,
+                );
+            }
+        }
+    };
+}
+
+/// Generates a safe public function named `$function_name` to write to the 64-bit system register
+/// `$sysreg`.
+///
+/// This should only be used for system registers which are indeed safe to write.
+macro_rules! write_sysreg64 {
     ($sysreg:ident, $function_name:ident) => {
         pub fn $function_name(value: u64) {
             // SAFETY: The caller of the macro guarantees that this system register is safe to
