@@ -13,7 +13,7 @@
 //!
 //! ```
 //! use arm_gic::{
-//!     gicv3::{GicV3, SgiTarget},
+//!     gicv3::{SgiTarget, SingleCoreGicV3},
 //!     irq_enable, IntId,
 //! };
 //!
@@ -22,16 +22,16 @@
 //! const GICR_BASE_ADDRESS: *mut u64 = 0x80A_0000 as _;
 //!
 //! // Initialise the GIC.
-//! let mut gic = unsafe { GicV3::new(GICD_BASE_ADDRESS, [GICR_BASE_ADDRESS]) };
+//! let mut gic = unsafe { SingleCoreGicV3::new(GICD_BASE_ADDRESS, [GICR_BASE_ADDRESS]) };
 //! gic.setup(0);
 //!
 //! // Configure an SGI and then send it to ourself.
 //! let sgi_intid = IntId::sgi(3);
-//! GicV3::<1>::set_priority_mask(0xff);
+//! SingleCoreGicV3::set_priority_mask(0xff);
 //! gic.set_interrupt_priority(sgi_intid, Some(0), 0x80);
 //! gic.enable_interrupt(sgi_intid, Some(0), true);
 //! irq_enable();
-//! GicV3::<1>::send_sgi(
+//! SingleCoreGicV3::send_sgi(
 //!     sgi_intid,
 //!     SgiTarget::List {
 //!         affinity3: 0,

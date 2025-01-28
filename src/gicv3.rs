@@ -74,6 +74,8 @@ unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
     modify_bit(registers, nth, false);
 }
 
+pub type SingleCoreGicV3 = GicV3<1>;
+
 /// Driver for an Arm Generic Interrupt Controller version 3 (or 4).
 #[derive(Debug)]
 pub struct GicV3<const CPU_COUNT: usize> {
