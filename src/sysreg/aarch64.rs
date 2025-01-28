@@ -8,7 +8,7 @@
 macro_rules! read_sysreg32 {
     ($sysreg:ident, $function_name:ident) => {
         pub fn $function_name() -> u32 {
-            let value:u64 ;
+            let value:u64;
             // SAFETY: The caller of the macro guarantees that this system register is safe to read.
             unsafe {
                 core::arch::asm!(
