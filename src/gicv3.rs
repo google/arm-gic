@@ -8,8 +8,8 @@ pub mod registers;
 
 use self::registers::{GicdCtlr, GicrCtlr, Waker, GICD, GICR, SGI};
 use crate::sysreg::{
-    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen1_el1,
-    write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
+    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen0_el1,
+    write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
 };
 use crate::{IntId, Trigger};
 use core::hint::spin_loop;
@@ -76,13 +76,13 @@ unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
 
 /// Driver for an Arm Generic Interrupt Controller version 3 (or 4).
 #[derive(Debug)]
-pub struct GicV3 {
+pub struct GicV3<const CPU_COUNT: usize> {
     gicd: *mut GICD,
-    gicr: *mut GICR,
-    sgi: *mut SGI,
+    gicrs: [*mut GICR; CPU_COUNT],
+    sgis: [*mut SGI; CPU_COUNT],
 }
 
-impl GicV3 {
+impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
     /// Constructs a new instance of the driver for a GIC with the given distributor and
     /// redistributor base addresses.
     ///
@@ -92,26 +92,42 @@ impl GicV3 {
     /// respectively. These regions must be mapped into the address space of the process as device
     /// memory, and not have any other aliases, either via another instance of this driver or
     /// otherwise.
-    pub unsafe fn new(gicd: *mut u64, gicr: *mut u64) -> Self {
+    pub unsafe fn new(gicd: *mut u64, gicrs: [*mut u64; CPU_COUNT]) -> Self {
         Self {
             gicd: gicd as _,
-            gicr: gicr as _,
-            sgi: gicr.wrapping_byte_add(SGI_OFFSET) as _,
+            gicrs: gicrs.map(|gicr| gicr as _),
+            sgis: gicrs.map(|gicr| gicr.wrapping_byte_add(SGI_OFFSET) as _),
         }
     }
 
-    /// Initialises the GIC.
-    pub fn setup(&mut self) {
+    /// Enables system register access, marks the given CPU core as awake, and sets some basic
+    /// configuration.
+    ///
+    /// `cpu` should be the linear index of the CPU core as used by the GIC redistributor.
+    ///
+    /// If the core is already marked as awake this will not return any error.
+    ///
+    /// This disables the use of `ICC_PMR_EL1` as a hint for interrupt distribution, configures a
+    /// write to an EOI register to also deactivate the interrupt, and configures preemption groups
+    /// for group 0 and group 1 interrupts separately.
+    pub fn init_cpu(&mut self, cpu: usize) {
         // Enable system register access.
         write_icc_sre_el1(0x01);
 
         // Ignore error in case core is already awake.
-        let _ = self.redistributor_mark_core_awake();
+        let _ = self.redistributor_mark_core_awake(cpu);
 
         // Disable use of `ICC_PMR_EL1` as a hint for interrupt distribution, configure a write to
         // an EOI register to also deactivate the interrupt, and configure preemption groups for
         // group 0 and group 1 interrupts separately.
         write_icc_ctlr_el1(0);
+    }
+
+    /// Initialises the GIC and marks the given CPU core as awake.
+    ///
+    /// `cpu` should be the linear index of the CPU core as used by the GIC redistributor.
+    pub fn setup(&mut self, cpu: usize) {
+        self.init_cpu(cpu);
 
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface.
@@ -125,19 +141,34 @@ impl GicV3 {
         // redistributor interface.
         unsafe {
             // Put all SGIs and PPIs into non-secure group 1.
-            (&raw mut (*self.sgi).igroupr0).write_volatile(0xffffffff);
+            for cpu in 0..CPU_COUNT {
+                (&raw mut (*self.sgis[cpu]).igroupr0).write_volatile(0xffffffff);
+            }
             // Put all SPIs into non-secure group 1.
             for i in 1..32 {
                 (&raw mut (*self.gicd).igroupr[i]).write_volatile(0xffffffff);
             }
         }
 
-        // Enable non-secure group 1.
-        write_icc_igrpen1_el1(0x00000001);
+        // Enable group 1 for the current security state.
+        Self::enable_group1(true);
+    }
+
+    /// Enables or disables group 0 interrupts.
+    pub fn enable_group0(enable: bool) {
+        write_icc_igrpen0_el1(if enable { 0x01 } else { 0x00 });
+    }
+
+    /// Enables or disables group 1 interrupts for the current security state.
+    pub fn enable_group1(enable: bool) {
+        write_icc_igrpen1_el1(if enable { 0x01 } else { 0x00 });
     }
 
     /// Enables or disables the interrupt with the given ID.
-    pub fn enable_interrupt(&mut self, intid: IntId, enable: bool) {
+    ///
+    /// If it is an SGI or PPI then the CPU core on which to enable it must also be specified;
+    /// otherwise this is ignored and may be `None`.
+    pub fn enable_interrupt(&mut self, intid: IntId, cpu: Option<usize>, enable: bool) {
         let index = (intid.0 / 32) as usize;
         let bit = 1 << (intid.0 % 32);
 
@@ -148,18 +179,18 @@ impl GicV3 {
             if enable {
                 (&raw mut (*self.gicd).isenabler[index]).write_volatile(bit);
                 if intid.is_private() {
-                    (&raw mut (*self.sgi).isenabler0).write_volatile(bit);
+                    (&raw mut (*self.sgis[cpu.unwrap()]).isenabler0).write_volatile(bit);
                 }
             } else {
                 (&raw mut (*self.gicd).icenabler[index]).write_volatile(bit);
                 if intid.is_private() {
-                    (&raw mut (*self.sgi).icenabler0).write_volatile(bit);
+                    (&raw mut (*self.sgis[cpu.unwrap()]).icenabler0).write_volatile(bit);
                 }
             }
         }
     }
 
-    /// Enables all interrupts.
+    /// Enables or disables all interrupts on all CPU cores.
     pub fn enable_all_interrupts(&mut self, enable: bool) {
         for i in 0..32 {
             // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
@@ -172,13 +203,15 @@ impl GicV3 {
                 }
             }
         }
-        // SAFETY: We know that `self.sgi` is a valid and unique pointer to the SGI and PPI
-        // registers of a GIC redistributor interface.
-        unsafe {
-            if enable {
-                (&raw mut (*self.sgi).isenabler0).write_volatile(0xffffffff);
-            } else {
-                (&raw mut (*self.sgi).icenabler0).write_volatile(0xffffffff);
+        for cpu in 0..CPU_COUNT {
+            // SAFETY: We know that `self.sgis` are valid and unique pointers to the SGI and PPI
+            // registers of a GIC redistributor interface.
+            unsafe {
+                if enable {
+                    (&raw mut (*self.sgis[cpu]).isenabler0).write_volatile(0xffffffff);
+                } else {
+                    (&raw mut (*self.sgis[cpu]).icenabler0).write_volatile(0xffffffff);
+                }
             }
         }
     }
@@ -194,14 +227,15 @@ impl GicV3 {
     ///
     /// Note that lower numbers correspond to higher priorities; i.e. 0 is the highest priority, and
     /// 255 is the lowest.
-    pub fn set_interrupt_priority(&mut self, intid: IntId, priority: u8) {
+    pub fn set_interrupt_priority(&mut self, intid: IntId, cpu: Option<usize>, priority: u8) {
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
         // redistributor interface.
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             if intid.is_private() {
-                (&raw mut (*self.sgi).ipriorityr[intid.0 as usize]).write_volatile(priority);
+                (&raw mut (*self.sgis[cpu.unwrap()]).ipriorityr[intid.0 as usize])
+                    .write_volatile(priority);
             } else {
                 (&raw mut (*self.gicd).ipriorityr[intid.0 as usize]).write_volatile(priority);
             }
@@ -209,7 +243,7 @@ impl GicV3 {
     }
 
     /// Configures the trigger type for the interrupt with the given ID.
-    pub fn set_trigger(&mut self, intid: IntId, trigger: Trigger) {
+    pub fn set_trigger(&mut self, intid: IntId, cpu: Option<usize>, trigger: Trigger) {
         let index = (intid.0 / 16) as usize;
         let bit = 1 << (((intid.0 % 16) * 2) + 1);
 
@@ -219,7 +253,7 @@ impl GicV3 {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             let register = if intid.is_private() {
-                (&raw mut (*self.sgi).icfgr[index])
+                (&raw mut (*self.sgis[cpu.unwrap()]).icfgr[index])
             } else {
                 (&raw mut (*self.gicd).icfgr[index])
             };
@@ -232,7 +266,7 @@ impl GicV3 {
     }
 
     /// Assigns the interrupt with id `intid` to interrupt group `group`.
-    pub fn set_group(&mut self, intid: IntId, group: Group) {
+    pub fn set_group(&mut self, intid: IntId, cpu: Option<usize>, group: Group) {
         // FIXME: For now we assume that we are running a single-core system.
         // so there's just one GICR frame and one SGI configuration.
 
@@ -242,8 +276,8 @@ impl GicV3 {
         let (igroupr, igrpmodr): (*mut [u32], *mut [u32]) = unsafe {
             if intid.is_private() {
                 (
-                    &raw mut (*self.sgi).igroupr0 as *mut [u32; 1],
-                    &raw mut (*self.sgi).igrpmodr0 as *mut [u32; 1],
+                    &raw mut (*self.sgis[cpu.unwrap()]).igroupr0 as *mut [u32; 1],
+                    &raw mut (*self.sgis[cpu.unwrap()]).igrpmodr0 as *mut [u32; 1],
                 )
             } else {
                 (
@@ -334,16 +368,16 @@ impl GicV3 {
     ///
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
-    pub fn gicr_ptr(&mut self) -> *mut GICR {
-        self.gicr
+    pub fn gicr_ptr(&mut self, cpu: usize) -> *mut GICR {
+        self.gicrs[cpu]
     }
 
     /// Returns a raw pointer to the GIC redistributor SGI and PPI registers.
     ///
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
-    pub fn sgi_ptr(&mut self) -> *mut SGI {
-        self.sgi
+    pub fn sgi_ptr(&mut self, cpu: usize) -> *mut SGI {
+        self.sgis[cpu]
     }
 
     fn gicd_barrier(&mut self) {
@@ -380,14 +414,11 @@ impl GicV3 {
     }
 
     /// Blocks until register write for the current Security state is no longer in progress.
-    pub fn gicr_barrier(&mut self) {
-        // FIXME: For now we assume that we are running a single-core system.
-        // so there's just one GICR frame and one SGI configuration.
-
+    pub fn gicr_barrier(&mut self, cpu: usize) {
         // SAFETY: We know that `self.sgi` is a valid and unique pointer to the SGI and PPI
         // registers of a GIC redistributor interface.
         unsafe {
-            while (&raw const (*self.gicr).ctlr)
+            while (&raw const (*self.gicrs[cpu]).ctlr)
                 .read_volatile()
                 .contains(GicrCtlr::RWP)
             {}
@@ -397,14 +428,11 @@ impl GicV3 {
     /// Informs the GIC redistributor that the core has awakened.
     ///
     /// Blocks until `GICR_WAKER.ChildrenAsleep` is cleared.
-    pub fn redistributor_mark_core_awake(&mut self) -> Result<(), GICRError> {
-        // FIXME: For now we assume that we are running a single-core system.
-        // so there's just one GICR frame and one SGI configuration.
-
+    pub fn redistributor_mark_core_awake(&mut self, cpu: usize) -> Result<(), GICRError> {
         // SAFETY: We know that `self.gicr` is a valid and unique pointer to
         // the GIC redistributor interface.
         unsafe {
-            let mut gicr_waker = (&raw const (*self.gicr).waker).read_volatile();
+            let mut gicr_waker = (&raw const (*self.gicrs[cpu]).waker).read_volatile();
 
             // The WAKER_PS_BIT should be changed to 0 only when WAKER_CA_BIT is 1.
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
@@ -413,10 +441,10 @@ impl GicV3 {
 
             // Mark the connected core as awake.
             gicr_waker -= Waker::PROCESSOR_SLEEP;
-            (&raw mut (*self.gicr).waker).write_volatile(gicr_waker);
+            (&raw mut (*self.gicrs[cpu]).waker).write_volatile(gicr_waker);
 
             // Wait till the WAKER_CA_BIT changes to 0.
-            while (&raw const (*self.gicr).waker)
+            while (&raw const (*self.gicrs[cpu]).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {
@@ -429,10 +457,10 @@ impl GicV3 {
 }
 
 // SAFETY: The GIC interface can be accessed from any CPU core.
-unsafe impl Send for GicV3 {}
+unsafe impl<const CPU_COUNT: usize> Send for GicV3<CPU_COUNT> {}
 
 // SAFETY: Any operations which change state require `&mut GicV3`, so `&GicV3` is fine to share.
-unsafe impl Sync for GicV3 {}
+unsafe impl<const CPU_COUNT: usize> Sync for GicV3<CPU_COUNT> {}
 
 /// The group configuration for an interrupt.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
