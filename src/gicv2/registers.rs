@@ -12,13 +12,40 @@ bitflags! {
     }
 }
 
+/// GICv2 type register value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct Typer(u32);
+
+impl Typer {
+    /// Returns the maximum number of lockable SPIs supported, from 0 to 31.
+    pub fn lockable_spi_count(self) -> u32 {
+        (self.0 >> 11) & 0b11111
+    }
+
+    /// Returns whether the GIC supports two security states.
+    pub fn has_security_extension(self) -> bool {
+        self.0 & (1 << 10) != 0
+    }
+
+    /// Returns the number of implemented CPU interfaces.
+    pub fn cpu_count(self) -> u32 {
+        ((self.0 >> 5) & 0b111) + 1
+    }
+
+    /// Returns the maximum number of interrupts supported.
+    pub fn num_irqs(&self) -> u32 {
+        ((self.0 & 0b11111) + 1) * 32
+    }
+}
+
 /// GIC Distributor registers.
 #[repr(C, align(8))]
 pub struct Gicd {
     /// Distributor Control Register
     pub ctlr: GicdCtlr,
     /// Interrupt Controller Type Register
-    pub typer: u32,
+    pub typer: Typer,
     /// Distributor Implementer Identification Register.
     pub iidr: u32,
     _reserved_0: [u32; 0x1D],
@@ -78,4 +105,22 @@ pub struct Gicc {
     _reserved_1: [u32; 0x3C0],
     /// Deactivate Interrupt Register.
     pub dir: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cpu_count() {
+        assert_eq!(Typer(0).cpu_count(), 1);
+        assert_eq!(Typer(7 << 5).cpu_count(), 8);
+    }
+
+    #[test]
+    fn it_lines() {
+        assert_eq!(Typer(0).num_irqs(), 32);
+        assert_eq!(Typer(0b00011).num_irqs(), 128);
+        assert_eq!(Typer(0b11111).num_irqs(), 1024);
+    }
 }
