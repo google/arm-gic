@@ -12,8 +12,9 @@ bitflags! {
     }
 }
 
+/// GIC Distributor registers.
 #[repr(C, align(8))]
-pub struct GICD {
+pub struct Gicd {
     /// Distributor Control Register
     pub ctlr: GicdCtlr,
     /// Interrupt Controller Type Register
@@ -46,8 +47,9 @@ pub struct GICD {
     pub sgir: u32,
 }
 
+/// GIC CPU interface registers.
 #[repr(C, align(8))]
-pub struct GICC {
+pub struct Gicc {
     /// CPU Interface Control Register.
     pub ctlr: u32,
     /// Interrupt Priority Mask Register.
