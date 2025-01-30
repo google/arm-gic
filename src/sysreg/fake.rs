@@ -12,14 +12,14 @@ pub static SYSREGS: Mutex<SystemRegisters> = Mutex::new(SystemRegisters::new());
 /// A set of fake system registers.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SystemRegisters {
-    pub icc_iar1_el1: u64,
-    pub icc_ctlr_el1: u64,
-    pub icc_eoir1_el1: u64,
-    pub icc_igrpen0_el1: u64,
-    pub icc_igrpen1_el1: u64,
-    pub icc_pmr_el1: u64,
+    pub icc_iar1_el1: u32,
+    pub icc_ctlr_el1: u32,
+    pub icc_eoir1_el1: u32,
+    pub icc_igrpen0_el1: u32,
+    pub icc_igrpen1_el1: u32,
+    pub icc_pmr_el1: u32,
     pub icc_sgi1r_el1: u64,
-    pub icc_sre_el1: u64,
+    pub icc_sre_el1: u32,
 }
 
 impl SystemRegisters {
@@ -41,7 +41,7 @@ impl SystemRegisters {
 macro_rules! read_sysreg32 {
     ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident) => {
         pub fn $function_name() -> u32 {
-            crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg as u32
+            crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg
         }
     };
 }
@@ -51,7 +51,7 @@ macro_rules! read_sysreg32 {
 macro_rules! write_sysreg32 {
     ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident) => {
         pub fn $function_name(value: u32) {
-            crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value as u64;
+            crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
         }
     };
 }
