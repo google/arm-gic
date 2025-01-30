@@ -11,6 +11,7 @@
 ### Bugfixes
 
 - Fixed `GicV3::setup` not to write to GICD IGROUPR[0].
+- Fixed `GicV3::enable_interrupt` not to write to GICD for private interrupt IDs.
 
 ### Improvements
 
