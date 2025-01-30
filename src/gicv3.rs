@@ -6,7 +6,7 @@
 
 pub mod registers;
 
-use self::registers::{GicdCtlr, GicrCtlr, Waker, GICD, GICR, SGI};
+use self::registers::{Gicd, GicdCtlr, Gicr, GicrCtlr, Sgi, Waker};
 use crate::sysreg::{
     read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen0_el1,
     write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
@@ -77,8 +77,8 @@ unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
 /// Driver for an Arm Generic Interrupt Controller version 3 (or 4).
 #[derive(Debug)]
 pub struct GicV3 {
-    gicd: *mut GICD,
-    gicr_base: *mut GICR,
+    gicd: *mut Gicd,
+    gicr_base: *mut Gicr,
     /// The number of CPU cores, and hence redistributors.
     cpu_count: usize,
     /// The offset in bytes between the start of redistributor frames.
@@ -352,7 +352,7 @@ impl GicV3 {
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt() -> Option<IntId> {
-        let intid = IntId(read_icc_iar1_el1() as u32);
+        let intid = IntId(read_icc_iar1_el1());
         if intid == IntId::SPECIAL_NONE {
             None
         } else {
@@ -363,7 +363,7 @@ impl GicV3 {
     /// Informs the interrupt controller that the CPU has completed processing the given interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
     pub fn end_interrupt(intid: IntId) {
-        write_icc_eoir1_el1(intid.0.into())
+        write_icc_eoir1_el1(intid.0)
     }
 
     /// Returns information about what the GIC implementation supports.
@@ -377,7 +377,7 @@ impl GicV3 {
     ///
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
-    pub fn gicd_ptr(&mut self) -> *mut GICD {
+    pub fn gicd_ptr(&mut self) -> *mut Gicd {
         self.gicd
     }
 
@@ -385,7 +385,7 @@ impl GicV3 {
     ///
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
-    pub fn gicr_ptr(&mut self, cpu: usize) -> *mut GICR {
+    pub fn gicr_ptr(&mut self, cpu: usize) -> *mut Gicr {
         assert!(cpu < self.cpu_count);
         self.gicr_base.wrapping_byte_add(cpu * self.gicr_stride)
     }
@@ -394,7 +394,7 @@ impl GicV3 {
     ///
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
-    pub fn sgi_ptr(&mut self, cpu: usize) -> *mut SGI {
+    pub fn sgi_ptr(&mut self, cpu: usize) -> *mut Sgi {
         self.gicr_ptr(cpu).wrapping_byte_add(SGI_OFFSET).cast()
     }
 

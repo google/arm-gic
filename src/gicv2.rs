@@ -6,14 +6,15 @@
 
 mod registers;
 
-use self::registers::{GicdCtlr, GICC, GICD};
+pub use self::registers::Typer;
+use self::registers::{Gicc, Gicd, GicdCtlr};
 use crate::{IntId, Trigger};
 
 /// Driver for an Arm Generic Interrupt Controller version 2.
 #[derive(Debug)]
 pub struct GicV2 {
-    gicd: *mut GICD,
-    gicc: *mut GICC,
+    gicd: *mut Gicd,
+    gicc: *mut Gicc,
 }
 
 impl GicV2 {
@@ -33,10 +34,11 @@ impl GicV2 {
         }
     }
 
-    fn max_irqs(&self) -> u32 {
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-        // GIC distributor interface.
-        unsafe { (((&raw const (*self.gicd).typer).read_volatile() as u32 & 0b11111) + 1) * 32 }
+    /// Returns information about what the GIC implementation supports.
+    pub fn typer(&self) -> Typer {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a GIC
+        // distributor interface.
+        unsafe { (&raw mut (*self.gicd).typer).read_volatile() }
     }
 
     /// Initialises the GIC.
@@ -145,21 +147,19 @@ impl GicV2 {
         assert!(intid.is_sgi());
 
         let sgi_value = match target {
-            SgiTarget::All => (u32::from(intid.0 & 0x0f)) | (0xff << 16),
+            SgiTarget::All => (intid.0 & 0x0f) | (0xff << 16),
             SgiTarget::List {
                 target_list_filter,
                 target_list,
             } => {
-                u32::from(intid.0 & 0xf)
-                    | u32::from(
-                        match target_list_filter {
-                            SgiTargetListFilter::CPUTargetList => 0b00 as u32,
-                            SgiTargetListFilter::ForwardOthersOnly => 0b01 as u32,
-                            SgiTargetListFilter::ForwardSelfOnly => 0b10 as u32,
-                        } << 24,
-                    )
-                    | u32::from(((target_list & 0xff) as u32) << 16)
-                    | (1u32 << 15)
+                (intid.0 & 0xf)
+                    | match target_list_filter {
+                        SgiTargetListFilter::CPUTargetList => 0b00,
+                        SgiTargetListFilter::ForwardOthersOnly => 0b01,
+                        SgiTargetListFilter::ForwardSelfOnly => 0b10,
+                    } << 24
+                    | u32::from(target_list & 0xff) << 16
+                    | 1u32 << 15
             }
         };
 

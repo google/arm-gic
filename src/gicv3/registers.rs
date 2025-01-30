@@ -140,9 +140,8 @@ pub enum RangeSelectorSupport {
 }
 
 /// GIC Distributor registers.
-#[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
-pub struct GICD {
+pub struct Gicd {
     /// Distributor control register.
     pub ctlr: GicdCtlr,
     /// Interrupt controller type register.
@@ -261,9 +260,8 @@ bitflags! {
 }
 
 /// GIC Redistributor registers.
-#[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
-pub struct GICR {
+pub struct Gicr {
     /// Redistributor control register.
     pub ctlr: GicrCtlr,
     /// Implementer identification register.
@@ -312,9 +310,8 @@ pub struct GICR {
 }
 
 /// GIC Redistributor SGI and PPI registers.
-#[allow(clippy::upper_case_acronyms)]
 #[repr(C, align(8))]
-pub struct SGI {
+pub struct Sgi {
     _reserved0: [u32; 32],
     /// Interrupt group register 0.
     pub igroupr0: u32,
