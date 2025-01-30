@@ -74,17 +74,18 @@ unsafe fn clear_bit(registers: *mut [u32], nth: usize) {
     modify_bit(registers, nth, false);
 }
 
-pub type SingleCoreGicV3 = GicV3<1>;
-
 /// Driver for an Arm Generic Interrupt Controller version 3 (or 4).
 #[derive(Debug)]
-pub struct GicV3<const CPU_COUNT: usize> {
+pub struct GicV3 {
     gicd: *mut GICD,
-    gicrs: [*mut GICR; CPU_COUNT],
-    sgis: [*mut SGI; CPU_COUNT],
+    gicr_base: *mut GICR,
+    /// The number of CPU cores, and hence redistributors.
+    cpu_count: usize,
+    /// The offset in bytes between the start of redistributor frames.
+    gicr_stride: usize,
 }
 
-impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
+impl GicV3 {
     /// Constructs a new instance of the driver for a GIC with the given distributor and
     /// redistributor base addresses.
     ///
@@ -94,11 +95,18 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
     /// respectively. These regions must be mapped into the address space of the process as device
     /// memory, and not have any other aliases, either via another instance of this driver or
     /// otherwise.
-    pub unsafe fn new(gicd: *mut u64, gicrs: [*mut u64; CPU_COUNT]) -> Self {
+    pub unsafe fn new(
+        gicd: *mut u64,
+        gicr_base: *mut u64,
+        cpu_count: usize,
+        gicr_stride: usize,
+    ) -> Self {
+        assert_eq!(gicr_stride % 0x20000, 0);
         Self {
             gicd: gicd as _,
-            gicrs: gicrs.map(|gicr| gicr as _),
-            sgis: gicrs.map(|gicr| gicr.wrapping_byte_add(SGI_OFFSET) as _),
+            gicr_base: gicr_base as _,
+            cpu_count,
+            gicr_stride,
         }
     }
 
@@ -143,8 +151,8 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         // redistributor interface.
         unsafe {
             // Put all SGIs and PPIs into non-secure group 1.
-            for cpu in 0..CPU_COUNT {
-                (&raw mut (*self.sgis[cpu]).igroupr0).write_volatile(0xffffffff);
+            for cpu in 0..self.cpu_count {
+                (&raw mut (*self.sgi_ptr(cpu)).igroupr0).write_volatile(0xffffffff);
             }
             // Put all SPIs into non-secure group 1.
             for i in 1..32 {
@@ -177,8 +185,8 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         let (isenabler, icenabler): (*mut [u32], *mut [u32]) = unsafe {
             if intid.is_private() {
                 (
-                    &raw mut (*self.sgis[cpu.unwrap()]).isenabler0 as *mut [u32; 1],
-                    &raw mut (*self.sgis[cpu.unwrap()]).icenabler0 as *mut [u32; 1],
+                    &raw mut (*self.sgi_ptr(cpu.unwrap())).isenabler0 as *mut [u32; 1],
+                    &raw mut (*self.sgi_ptr(cpu.unwrap())).icenabler0 as *mut [u32; 1],
                 )
             } else {
                 (
@@ -212,14 +220,14 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
                 }
             }
         }
-        for cpu in 0..CPU_COUNT {
+        for cpu in 0..self.cpu_count {
             // SAFETY: We know that `self.sgis` are valid and unique pointers to the SGI and PPI
             // registers of a GIC redistributor interface.
             unsafe {
                 if enable {
-                    (&raw mut (*self.sgis[cpu]).isenabler0).write_volatile(0xffffffff);
+                    (&raw mut (*self.sgi_ptr(cpu)).isenabler0).write_volatile(0xffffffff);
                 } else {
-                    (&raw mut (*self.sgis[cpu]).icenabler0).write_volatile(0xffffffff);
+                    (&raw mut (*self.sgi_ptr(cpu)).icenabler0).write_volatile(0xffffffff);
                 }
             }
         }
@@ -243,7 +251,7 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             if intid.is_private() {
-                (&raw mut (*self.sgis[cpu.unwrap()]).ipriorityr[intid.0 as usize])
+                (&raw mut (*self.sgi_ptr(cpu.unwrap())).ipriorityr[intid.0 as usize])
                     .write_volatile(priority);
             } else {
                 (&raw mut (*self.gicd).ipriorityr[intid.0 as usize]).write_volatile(priority);
@@ -262,7 +270,7 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         unsafe {
             // Affinity routing is enabled, so use the GICR for SGIs and PPIs.
             let register = if intid.is_private() {
-                (&raw mut (*self.sgis[cpu.unwrap()]).icfgr[index])
+                (&raw mut (*self.sgi_ptr(cpu.unwrap())).icfgr[index])
             } else {
                 (&raw mut (*self.gicd).icfgr[index])
             };
@@ -285,8 +293,8 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         let (igroupr, igrpmodr): (*mut [u32], *mut [u32]) = unsafe {
             if intid.is_private() {
                 (
-                    &raw mut (*self.sgis[cpu.unwrap()]).igroupr0 as *mut [u32; 1],
-                    &raw mut (*self.sgis[cpu.unwrap()]).igrpmodr0 as *mut [u32; 1],
+                    &raw mut (*self.sgi_ptr(cpu.unwrap())).igroupr0 as *mut [u32; 1],
+                    &raw mut (*self.sgi_ptr(cpu.unwrap())).igrpmodr0 as *mut [u32; 1],
                 )
             } else {
                 (
@@ -378,7 +386,8 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
     pub fn gicr_ptr(&mut self, cpu: usize) -> *mut GICR {
-        self.gicrs[cpu]
+        assert!(cpu < self.cpu_count);
+        self.gicr_base.wrapping_byte_add(cpu * self.gicr_stride)
     }
 
     /// Returns a raw pointer to the GIC redistributor SGI and PPI registers.
@@ -386,7 +395,7 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
     pub fn sgi_ptr(&mut self, cpu: usize) -> *mut SGI {
-        self.sgis[cpu]
+        self.gicr_ptr(cpu).wrapping_byte_add(SGI_OFFSET).cast()
     }
 
     fn gicd_barrier(&mut self) {
@@ -427,7 +436,7 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         // SAFETY: We know that `self.sgi` is a valid and unique pointer to the SGI and PPI
         // registers of a GIC redistributor interface.
         unsafe {
-            while (&raw const (*self.gicrs[cpu]).ctlr)
+            while (&raw const (*self.gicr_ptr(cpu)).ctlr)
                 .read_volatile()
                 .contains(GicrCtlr::RWP)
             {}
@@ -441,7 +450,7 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
         // SAFETY: We know that `self.gicr` is a valid and unique pointer to
         // the GIC redistributor interface.
         unsafe {
-            let mut gicr_waker = (&raw const (*self.gicrs[cpu]).waker).read_volatile();
+            let mut gicr_waker = (&raw const (*self.gicr_ptr(cpu)).waker).read_volatile();
 
             // The WAKER_PS_BIT should be changed to 0 only when WAKER_CA_BIT is 1.
             if !gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
@@ -450,10 +459,10 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
 
             // Mark the connected core as awake.
             gicr_waker -= Waker::PROCESSOR_SLEEP;
-            (&raw mut (*self.gicrs[cpu]).waker).write_volatile(gicr_waker);
+            (&raw mut (*self.gicr_ptr(cpu)).waker).write_volatile(gicr_waker);
 
             // Wait till the WAKER_CA_BIT changes to 0.
-            while (&raw const (*self.gicrs[cpu]).waker)
+            while (&raw const (*self.gicr_ptr(cpu)).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {
@@ -466,10 +475,10 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
 }
 
 // SAFETY: The GIC interface can be accessed from any CPU core.
-unsafe impl<const CPU_COUNT: usize> Send for GicV3<CPU_COUNT> {}
+unsafe impl Send for GicV3 {}
 
 // SAFETY: Any operations which change state require `&mut GicV3`, so `&GicV3` is fine to share.
-unsafe impl<const CPU_COUNT: usize> Sync for GicV3<CPU_COUNT> {}
+unsafe impl Sync for GicV3 {}
 
 /// The group configuration for an interrupt.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
