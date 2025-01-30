@@ -6,6 +6,7 @@
 
 mod registers;
 
+pub use self::registers::Typer;
 use self::registers::{Gicc, Gicd, GicdCtlr};
 use crate::{IntId, Trigger};
 
@@ -33,10 +34,11 @@ impl GicV2 {
         }
     }
 
-    fn max_irqs(&self) -> u32 {
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-        // GIC distributor interface.
-        unsafe { (((&raw const (*self.gicd).typer).read_volatile() & 0b11111) + 1) * 32 }
+    /// Returns information about what the GIC implementation supports.
+    pub fn typer(&self) -> Typer {
+        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a GIC
+        // distributor interface.
+        unsafe { (&raw mut (*self.gicd).typer).read_volatile() }
     }
 
     /// Initialises the GIC.
