@@ -171,30 +171,37 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
     /// If it is an SGI or PPI then the CPU core on which to enable it must also be specified;
     /// otherwise this is ignored and may be `None`.
     pub fn enable_interrupt(&mut self, intid: IntId, cpu: Option<usize>, enable: bool) {
-        let index = (intid.0 / 32) as usize;
-        let bit = 1 << (intid.0 % 32);
-
         // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
         // GIC distributor interface, and `self.sgi` to the SGI and PPI registers of a GIC
         // redistributor interface.
+        let (isenabler, icenabler): (*mut [u32], *mut [u32]) = unsafe {
+            if intid.is_private() {
+                (
+                    &raw mut (*self.sgis[cpu.unwrap()]).isenabler0 as *mut [u32; 1],
+                    &raw mut (*self.sgis[cpu.unwrap()]).icenabler0 as *mut [u32; 1],
+                )
+            } else {
+                (
+                    &raw mut (*self.gicd).isenabler,
+                    &raw mut (*self.gicd).icenabler,
+                )
+            }
+        };
+
+        // SAFETY: We know that `isenabler` and `icenabler` are valid and unique pointers
+        // to the registers of GIC distributor or redistributor interface.
         unsafe {
             if enable {
-                (&raw mut (*self.gicd).isenabler[index]).write_volatile(bit);
-                if intid.is_private() {
-                    (&raw mut (*self.sgis[cpu.unwrap()]).isenabler0).write_volatile(bit);
-                }
+                set_bit(isenabler, intid.0 as usize);
             } else {
-                (&raw mut (*self.gicd).icenabler[index]).write_volatile(bit);
-                if intid.is_private() {
-                    (&raw mut (*self.sgis[cpu.unwrap()]).icenabler0).write_volatile(bit);
-                }
+                set_bit(icenabler, intid.0 as usize);
             }
         }
     }
 
     /// Enables or disables all interrupts on all CPU cores.
     pub fn enable_all_interrupts(&mut self, enable: bool) {
-        for i in 0..32 {
+        for i in 1..32 {
             // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
             // of a GIC distributor interface.
             unsafe {
