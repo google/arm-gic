@@ -12,16 +12,23 @@ macro_rules! read_sysreg32 {
         #[doc = stringify!($sysreg)]
         #[doc = " system register"]
         pub fn $function_name() -> u32 {
-            let value: u64;
+            let value: u32;
             // SAFETY: The caller of the macro guarantees that this system register is safe to read.
             unsafe {
                 core::arch::asm!(
-                    concat!("mrs {value}, ", stringify!($sysreg)),
+                    concat!(
+                        "mrc p15, ",
+                        stringify!($opc1), ",",
+                        "{value}, ",
+                        stringify!($crm), ",",
+                        stringify!($crn), ",",
+                        stringify!($opc2)
+                    ),
                     options(nostack),
                     value = out(reg) value,
                 );
             }
-            value as u32
+            value
         }
     };
 }
@@ -41,9 +48,16 @@ macro_rules! write_sysreg32 {
             // write.
             unsafe {
                 core::arch::asm!(
-                    concat!("msr ", stringify!($sysreg), ", {value}"),
+                    concat!(
+                        "mcr p15, ",
+                        stringify!($opc1), ",",
+                        "{value}, ",
+                        stringify!($crm), ",",
+                        stringify!($crn), ",",
+                        stringify!($opc2)
+                    ),
                     options(nostack),
-                    value = in(reg) value as u64,
+                    value = in(reg) value,
                 );
             }
         }
@@ -63,11 +77,20 @@ macro_rules! write_sysreg64 {
         pub fn $function_name(value: u64) {
             // SAFETY: The caller of the macro guarantees that this system register is safe to
             // write.
+            let value_lo = value as u32;
+            let value_hi = (value >> 32) as u32;
             unsafe {
                 core::arch::asm!(
-                    concat!("msr ", stringify!($sysreg), ", {value}"),
+                    concat!(
+                        "mcrr p15, ",
+                        stringify!($opc1), ",",
+                        "{value_lo}, ",
+                        "{value_hi}, ",
+                        stringify!($crm)
+                    ),
                     options(nostack),
-                    value = in(reg) value,
+                    value_lo = in(reg) value_lo,
+                    value_hi = in(reg) value_hi,
                 );
             }
         }

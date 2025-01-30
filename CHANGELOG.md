@@ -19,6 +19,7 @@
 - Added methods to read type register and its fields.
 - Added `set_group`, `redistributor_mark_core_awake` and other methods to `GicV3`.
 - Added support for GICv2 in a separate `GicV2` driver.
+- Added support for aarch32.
 
 ## 0.1.2
 
