@@ -68,15 +68,14 @@ impl GicV2 {
                     return Err(());
                 }
             }
-            Ok(())
         } else {
             // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
             // GIC distributor interface.
             unsafe {
                 (&raw mut (*self.gicd).icenabler[index]).write(bit);
             }
-            Ok(())
         }
+        Ok(())
     }
 
     /// Enables all interrupts.
@@ -175,16 +174,14 @@ impl GicV2 {
     ///
     /// Returns `None` if there is no ptending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt(&mut self) -> Option<IntId> {
-        let intid: u32;
-
-        // SAFETY: This memory access is guaranteed by the user passing along a valid GICD address.
-        unsafe {
-            intid = (&raw mut (*self.gicc).aiar).read_volatile() as u32;
-        }
-        if IntId(intid) == IntId::SPECIAL_NONE {
+        let intid = IntId(
+            // SAFETY: This memory access is guaranteed by the user passing along a valid GICD address.
+            unsafe { (&raw mut (*self.gicc).aiar).read_volatile() },
+        );
+        if intid == IntId::SPECIAL_NONE {
             None
         } else {
-            Some(IntId(intid))
+            Some(intid)
         }
     }
 

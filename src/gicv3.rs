@@ -344,11 +344,11 @@ impl<const CPU_COUNT: usize> GicV3<CPU_COUNT> {
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt() -> Option<IntId> {
-        let intid = read_icc_iar1_el1() as u32;
-        if IntId(intid) == IntId::SPECIAL_NONE {
+        let intid = IntId(read_icc_iar1_el1() as u32);
+        if intid == IntId::SPECIAL_NONE {
             None
         } else {
-            Some(IntId(intid))
+            Some(intid)
         }
     }
 
