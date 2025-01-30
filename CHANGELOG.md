@@ -5,7 +5,7 @@
 ### Breaking changes
 
 - `IntId` and `Trigger` moved to top-level module, as they are shared with GICv2 driver.
-- Added support for multiple cores. `GicV3::new` now takes an array of redistributor base addresses,
+- Added support for multiple cores. `GicV3::new` now takes the CPU count and redistributor stride,
   and various other method take a cpu index.
 
 ### Bugfixes
