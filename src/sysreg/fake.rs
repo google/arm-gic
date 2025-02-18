@@ -4,6 +4,7 @@
 
 //! Fake implementations of system register getters and setters for unit tests.
 
+use super::IccSre;
 use std::sync::Mutex;
 
 /// Values of fake system registers.
@@ -25,7 +26,7 @@ pub struct SystemRegisters {
     pub icc_pmr_el1: u32,
     pub icc_sgi0r_el1: u64,
     pub icc_sgi1r_el1: u64,
-    pub icc_sre_el1: u32,
+    pub icc_sre_el1: IccSre,
 }
 
 impl SystemRegisters {
@@ -44,7 +45,7 @@ impl SystemRegisters {
             icc_pmr_el1: 0,
             icc_sgi0r_el1: 0,
             icc_sgi1r_el1: 0,
-            icc_sre_el1: 0,
+            icc_sre_el1: IccSre::empty(),
         }
     }
 }
@@ -63,6 +64,11 @@ macro_rules! read_sysreg32 {
 macro_rules! write_sysreg32 {
     ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident) => {
         pub fn $function_name(value: u32) {
+            crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
+        }
+    };
+    ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident, $type:ty) => {
+        pub fn $function_name(value: $type) {
             crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
         }
     };

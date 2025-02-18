@@ -11,7 +11,7 @@ use crate::sysreg::{
     read_icc_hppir0_el1, read_icc_hppir1_el1, read_icc_iar0_el1, read_icc_iar1_el1,
     write_icc_asgi1r_el1, write_icc_ctlr_el1, write_icc_eoir0_el1, write_icc_eoir1_el1,
     write_icc_igrpen0_el1, write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi0r_el1,
-    write_icc_sgi1r_el1, write_icc_sre_el1,
+    write_icc_sgi1r_el1, write_icc_sre_el1, IccSre,
 };
 use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
@@ -131,7 +131,7 @@ impl GicV3<'_> {
     /// for group 0 and group 1 interrupts separately.
     pub fn init_cpu(&mut self, cpu: usize) {
         // Enable system register access.
-        write_icc_sre_el1(0x01);
+        write_icc_sre_el1(IccSre::SRE);
 
         // Ignore error in case core is already awake.
         let _ = self.redistributor_mark_core_awake(cpu);

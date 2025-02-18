@@ -14,6 +14,8 @@ mod aarch64;
 #[macro_use]
 mod aarch32;
 
+use bitflags::bitflags;
+
 read_sysreg32!(icc_hppir0_el1, 0, c12, c8, 2, read_icc_hppir0_el1);
 read_sysreg32!(icc_hppir1_el1, 0, c12, c12, 2, read_icc_hppir1_el1);
 read_sysreg32!(icc_iar0_el1, 0, c12, c8, 0, read_icc_iar0_el1);
@@ -25,7 +27,22 @@ write_sysreg32!(icc_eoir1_el1, 0, c12, c12, 1, write_icc_eoir1_el1);
 write_sysreg32!(icc_igrpen0_el1, 0, c12, c12, 6, write_icc_igrpen0_el1);
 write_sysreg32!(icc_igrpen1_el1, 0, c12, c12, 7, write_icc_igrpen1_el1);
 write_sysreg32!(icc_pmr_el1, 0, c4, c6, 0, write_icc_pmr_el1);
-write_sysreg32!(icc_sre_el1, 0, c12, c12, 5, write_icc_sre_el1);
+write_sysreg32!(icc_sre_el1, 0, c12, c12, 5, write_icc_sre_el1, IccSre);
 write_sysreg64!(icc_asgi1r_el1, 0, c12, write_icc_asgi1r_el1);
 write_sysreg64!(icc_sgi0r_el1, 0, c12, write_icc_sgi0r_el1);
 write_sysreg64!(icc_sgi1r_el1, 0, c12, write_icc_sgi1r_el1);
+
+bitflags! {
+    /// Type for the `icc_sre_el2` and `icc_sre_el3` registers.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct IccSre: u32 {
+        /// System register enable.
+        ///
+        /// Enables access to the GIC CPU interface system registers.
+        const SRE = 1 << 0;
+        /// Disable FIQ bypass.
+        const DFB = 1 << 1;
+        /// Disable IRQ bypass.
+        const DIB = 1 << 2;
+    }
+}
