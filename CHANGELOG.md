@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 ### Breaking changes
 
@@ -12,6 +12,7 @@
 
 - Fixed `GicV3::setup` not to write to GICD IGROUPR[0].
 - Fixed `GicV3::enable_interrupt` not to write to GICD for private interrupt IDs.
+- Return `None` from `get_and_acknowledge_interrupt` for `SPECIAL_NONE`.
 
 ### Improvements
 
