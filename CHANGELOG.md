@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bugfixes
+
+- Fixed docs.rs build.
+
 ## 0.2.0
 
 ### Breaking changes
