@@ -13,7 +13,7 @@
 //!
 //! ```
 //! use arm_gic::{
-//!     gicv3::{SgiTarget, SingleCoreGicV3},
+//!     gicv3::{GicV3, SgiTarget},
 //!     irq_enable, IntId,
 //! };
 //!
@@ -22,7 +22,7 @@
 //! const GICR_BASE_ADDRESS: *mut u64 = 0x80A_0000 as _;
 //!
 //! // Initialise the GIC.
-//! let mut gic = unsafe { SingleCoreGicV3::new(GICD_BASE_ADDRESS, [GICR_BASE_ADDRESS]) };
+//! let mut gic = unsafe { GicV3::new(GICD_BASE_ADDRESS, GICR_BASE_ADDRESS, 1, 0x20000) };
 //! gic.setup(0);
 //!
 //! // Configure an SGI and then send it to ourself.
