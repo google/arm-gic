@@ -26,6 +26,7 @@ write_sysreg32!(icc_eoir0_el1, 0, c12, c8, 1, write_icc_eoir0_el1);
 write_sysreg32!(icc_eoir1_el1, 0, c12, c12, 1, write_icc_eoir1_el1);
 write_sysreg32!(icc_igrpen0_el1, 0, c12, c12, 6, write_icc_igrpen0_el1);
 write_sysreg32!(icc_igrpen1_el1, 0, c12, c12, 7, write_icc_igrpen1_el1);
+write_sysreg32!(icc_igrpen1_el3, 6, c12, c12, 7, write_icc_igrpen1_el3);
 write_sysreg32!(icc_pmr_el1, 0, c4, c6, 0, write_icc_pmr_el1);
 write_sysreg32!(icc_sre_el1, 0, c12, c12, 5, write_icc_sre_el1, IccSre);
 write_sysreg64!(icc_asgi1r_el1, 0, c12, write_icc_asgi1r_el1);
@@ -44,5 +45,8 @@ bitflags! {
         const DFB = 1 << 1;
         /// Disable IRQ bypass.
         const DIB = 1 << 2;
+        // TODO: Should this be on a different type? Not all registers have it.
+        /// Enables lower EL access to ICC_SRE_ELn.
+        const ENABLE = 1 << 3;
     }
 }
