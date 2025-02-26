@@ -42,7 +42,7 @@
 //! );
 //! ```
 
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(any(test, feature = "fakes")), no_std)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 pub mod gicv2;
