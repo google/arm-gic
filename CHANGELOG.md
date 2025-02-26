@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+- Added `fakes` feature which causes all system register access to be redirected to a fake instead.
+  This can be useful for tests.
+
 ## 0.2.1
 
 ### Bugfixes

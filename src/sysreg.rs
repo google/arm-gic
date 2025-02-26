@@ -2,15 +2,15 @@
 // This project is dual-licensed under Apache 2.0 and MIT terms.
 // See LICENSE-APACHE and LICENSE-MIT for details.
 
-#[cfg(test)]
+#[cfg(any(test, feature = "fakes"))]
 #[macro_use]
 pub mod fake;
 
-#[cfg(all(not(test), target_arch = "aarch64"))]
+#[cfg(all(not(any(test, feature = "fakes")), target_arch = "aarch64"))]
 #[macro_use]
 mod aarch64;
 
-#[cfg(all(not(test), target_arch = "arm"))]
+#[cfg(all(not(any(test, feature = "fakes")), target_arch = "arm"))]
 #[macro_use]
 mod aarch32;
 

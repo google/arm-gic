@@ -16,5 +16,8 @@ categories = ["embedded", "no-std", "hardware-support"]
 bitflags = "2.8.0"
 thiserror = { version = "2.0.11", default-features = false }
 
+[features]
+fakes = []
+
 [package.metadata.docs.rs]
 default-target = "aarch64-unknown-none"
