@@ -49,6 +49,9 @@ pub mod gicv2;
 pub mod gicv3;
 mod sysreg;
 
+#[cfg(feature = "fakes")]
+pub use sysreg::fake as sysreg_fake;
+
 #[cfg(target_arch = "aarch64")]
 use core::arch::asm;
 use core::fmt::{Debug, Formatter, Result};
