@@ -13,7 +13,7 @@ keywords = ["arm", "aarch64", "driver", "gic", "interrupt-controller"]
 categories = ["embedded", "no-std", "hardware-support"]
 
 [dependencies]
-bitflags = "2.8.0"
+bitflags = "2.9.0"
 thiserror = { version = "2.0.11", default-features = false }
 
 [features]
