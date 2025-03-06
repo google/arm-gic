@@ -166,7 +166,7 @@ impl IntId {
     }
 
     /// Returns whether this interrupt ID is for a Software Generated Interrupt.
-    fn is_sgi(self) -> bool {
+    pub fn is_sgi(self) -> bool {
         self.0 < Self::PPI_START
     }
 

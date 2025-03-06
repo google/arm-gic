@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+- Made `IntId::is_sgi` public.
+
 ## 0.2.2
 
 ### Improvements
