@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+- Made `IntId::is_sgi` public.
+- Made `IntId::is_*` methods const.
+
 ## 0.2.2
 
 ### Improvements
