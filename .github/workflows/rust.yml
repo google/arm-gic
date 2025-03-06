@@ -12,7 +12,7 @@ jobs:
   build:
     permissions:
       actions: read
-      checks: write
+      checks: read
       contents: read
       pull-requests: read
       statuses: read
