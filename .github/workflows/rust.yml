@@ -13,8 +13,8 @@ jobs:
     permissions:
       actions: write
       checks: write
-      contents: write
-      pull-requests: write
+      contents: read
+      pull-requests: read
       statuses: write
     runs-on: ubuntu-latest
     steps:
