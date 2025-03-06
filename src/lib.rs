@@ -166,22 +166,22 @@ impl IntId {
     }
 
     /// Returns whether this interrupt ID is for a Software Generated Interrupt.
-    pub fn is_sgi(self) -> bool {
+    pub const fn is_sgi(self) -> bool {
         self.0 < Self::PPI_START
     }
 
     /// Returns whether this interrupt ID is for a Private Peripheral Interrupt.
-    pub fn is_ppi(self) -> bool {
+    pub const fn is_ppi(self) -> bool {
         Self::PPI_START <= self.0 && self.0 < Self::SPI_START
     }
 
     /// Returns whether this interrupt ID is private to a core, i.e. it is an SGI or PPI.
-    pub fn is_private(self) -> bool {
+    pub const fn is_private(self) -> bool {
         self.is_sgi() || self.is_ppi()
     }
 
     /// Returns whether this interrupt ID is for a Shared Peripheral Interrupt.
-    pub fn is_spi(self) -> bool {
+    pub const fn is_spi(self) -> bool {
         Self::SPI_START <= self.0 && self.0 < Self::SPECIAL_START
     }
 
