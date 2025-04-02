@@ -24,6 +24,8 @@ const SGI_OFFSET: usize = 0x10000;
 pub enum GICRError {
     #[error("Redistributor has already been notified that the connected core is awake")]
     AlreadyAwake,
+    #[error("Redistributor has already been notified that the connected core is asleep")]
+    AlreadyAsleep,
 }
 
 /// Modifies `nth` bit of memory pointed by `registers`.
@@ -463,6 +465,36 @@ impl GicV3 {
 
             // Wait till the WAKER_CA_BIT changes to 0.
             while (&raw const (*self.gicr_ptr(cpu)).waker)
+                .read_volatile()
+                .contains(Waker::CHILDREN_ASLEEP)
+            {
+                spin_loop();
+            }
+
+            Ok(())
+        }
+    }
+
+    /// Informs the GIC redistributor that the core is asleep.
+    ///
+    /// Blocks until `GICR_WAKER.ChildrenAsleep` is set.
+    pub fn redistributor_mark_core_asleep(&mut self, cpu: usize) -> Result<(), GICRError> {
+        // SAFETY: We know that `self.gicr` is a valid and unique pointer to
+        // the GIC redistributor interface.
+        unsafe {
+            let mut gicr_waker = (&raw const (*self.gicr_ptr(cpu)).waker).read_volatile();
+
+            // The WAKER_PS_BIT should be changed to 1 only when WAKER_CA_BIT is 0.
+            if gicr_waker.contains(Waker::CHILDREN_ASLEEP) {
+                return Err(GICRError::AlreadyAsleep);
+            }
+
+            // Mark the connected core as asleep.
+            gicr_waker |= Waker::PROCESSOR_SLEEP;
+            (&raw mut (*self.gicr_ptr(cpu)).waker).write_volatile(gicr_waker);
+
+            // Wait till the WAKER_CA_BIT changes to 1.
+            while !(&raw const (*self.gicr_ptr(cpu)).waker)
                 .read_volatile()
                 .contains(Waker::CHILDREN_ASLEEP)
             {
