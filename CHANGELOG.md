@@ -5,6 +5,7 @@
 ### Breaking changes
 
 - Added `AlreadyAsleep` variant to `GICRError` enum.
+- Changed `GicV3::gicd_ptr`, `GicV3::gicr_ptr` and `GicV3::sgi_ptr` to return a `UniqueMmioPointer`.
 
 ### Improvements
 
