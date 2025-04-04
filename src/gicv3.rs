@@ -31,50 +31,31 @@ pub enum GICRError {
 }
 
 /// Modifies `nth` bit of memory pointed by `registers`.
-///
-/// # Safety
-///
-/// The caller must ensure that `registers` is a valid pointer for volatile reads and writes.
-unsafe fn modify_bit(registers: *mut [ReadPureWrite<u32>], nth: usize, set_bit: bool) {
+fn modify_bit(mut registers: UniqueMmioPointer<[ReadPureWrite<u32>]>, nth: usize, set_bit: bool) {
     let reg_num: usize = nth / 32;
 
     let bit_num: usize = nth % 32;
     let bit_mask: u32 = 1 << bit_num;
 
-    // SAFETY: `registers` is guaranteed to be
-    // a valid pointer for volatile reads and writes
-    // and `reg_num` does not exceed `*registers` length.
-    unsafe {
-        let reg_ptr = &raw mut (*registers)[reg_num];
-        let old_value = reg_ptr.read_volatile().0;
+    let mut reg_ptr = registers.get(reg_num).unwrap();
+    let old_value = reg_ptr.read();
 
-        let new_value: u32 = if set_bit {
-            old_value | bit_mask
-        } else {
-            old_value & !bit_mask
-        };
+    let new_value: u32 = if set_bit {
+        old_value | bit_mask
+    } else {
+        old_value & !bit_mask
+    };
 
-        reg_ptr.write_volatile(ReadPureWrite(new_value));
-    }
+    reg_ptr.write(new_value);
 }
 
 /// Sets `nth` bit of memory pointed by `registers`.
-///
-/// # Safety
-///
-/// The caller must ensure that `registers` is a valid
-/// pointer for volatile reads and writes.
-unsafe fn set_bit(registers: *mut [ReadPureWrite<u32>], nth: usize) {
+fn set_bit(registers: UniqueMmioPointer<[ReadPureWrite<u32>]>, nth: usize) {
     modify_bit(registers, nth, true);
 }
 
 /// Clears `nth` bit of memory pointed by `registers`.
-///
-/// # Safety
-///
-/// The caller must ensure that `registers` is a valid
-/// pointer for volatile reads and writes.
-unsafe fn clear_bit(registers: *mut [ReadPureWrite<u32>], nth: usize) {
+fn clear_bit(registers: UniqueMmioPointer<[ReadPureWrite<u32>]>, nth: usize) {
     modify_bit(registers, nth, false);
 }
 
@@ -179,29 +160,20 @@ impl GicV3 {
     /// If it is an SGI or PPI then the CPU core on which to enable it must also be specified;
     /// otherwise this is ignored and may be `None`.
     pub fn enable_interrupt(&mut self, intid: IntId, cpu: Option<usize>, enable: bool) {
-        let (isenabler, icenabler): (*mut [ReadPureWrite<u32>], *mut [ReadPureWrite<u32>]) =
-            if intid.is_private() {
-                let mut sgi = self.sgi_ptr(cpu.unwrap());
-                (
-                    field!(sgi, isenabler0).ptr_mut() as *mut [ReadPureWrite<u32>; 1],
-                    field!(sgi, icenabler0).ptr_mut() as *mut [ReadPureWrite<u32>; 1],
-                )
-            } else {
-                (
-                    field!(self.gicd, isenabler).ptr_mut(),
-                    field!(self.gicd, icenabler).ptr_mut(),
-                )
-            };
-
-        // SAFETY: We know that `isenabler` and `icenabler` are valid and unique pointers
-        // to the registers of GIC distributor or redistributor interface.
-        unsafe {
+        if intid.is_private() {
+            let mut sgi = self.sgi_ptr(cpu.unwrap());
             if enable {
-                set_bit(isenabler, intid.0 as usize);
+                set_bit(field!(sgi, isenabler0).into(), intid.0 as usize);
             } else {
-                set_bit(icenabler, intid.0 as usize);
+                set_bit(field!(sgi, icenabler0).into(), intid.0 as usize);
             }
-        }
+        } else {
+            if enable {
+                set_bit(field!(self.gicd, isenabler).into(), intid.0 as usize);
+            } else {
+                set_bit(field!(self.gicd, icenabler).into(), intid.0 as usize);
+            }
+        };
     }
 
     /// Enables or disables all interrupts on all CPU cores.
@@ -284,34 +256,33 @@ impl GicV3 {
 
     /// Assigns the interrupt with id `intid` to interrupt group `group`.
     pub fn set_group(&mut self, intid: IntId, cpu: Option<usize>, group: Group) {
-        let (igroupr, igrpmodr): (*mut [ReadPureWrite<u32>], *mut [ReadPureWrite<u32>]) =
-            if intid.is_private() {
-                let mut sgi = self.sgi_ptr(cpu.unwrap());
-                (
-                    field!(sgi, igroupr0).ptr_mut() as *mut [ReadPureWrite<u32>; 1],
-                    field!(sgi, igrpmodr0).ptr_mut() as *mut [ReadPureWrite<u32>; 1],
-                )
-            } else {
-                (
-                    field!(self.gicd, igroupr).ptr_mut(),
-                    field!(self.gicd, igrpmodr).ptr_mut(),
-                )
-            };
-
-        // SAFETY: We know that `igroupr` and `igrpmodr` are valid and unique pointers
-        // to the registers of GIC distributor or redistributor interface.
-        unsafe {
+        if intid.is_private() {
+            let mut sgi = self.sgi_ptr(cpu.unwrap());
             if let Group::Secure(sg) = group {
-                clear_bit(igroupr, intid.0 as usize);
+                clear_bit(field!(sgi, igroupr0).into(), intid.0 as usize);
+                let igrpmodr = field!(sgi, igrpmodr0).into();
                 match sg {
                     SecureIntGroup::Group1S => set_bit(igrpmodr, intid.0 as usize),
                     SecureIntGroup::Group0 => clear_bit(igrpmodr, intid.0 as usize),
                 }
             } else {
-                set_bit(igroupr, intid.0 as usize);
-                clear_bit(igrpmodr, intid.0 as usize);
+                set_bit(field!(sgi, igroupr0).into(), intid.0 as usize);
+                clear_bit(field!(sgi, igrpmodr0).into(), intid.0 as usize);
             }
-        }
+        } else {
+            if let Group::Secure(sg) = group {
+                let igroupr = field!(self.gicd, igroupr);
+                clear_bit(igroupr.into(), intid.0 as usize);
+                let igrpmodr = field!(self.gicd, igrpmodr);
+                match sg {
+                    SecureIntGroup::Group1S => set_bit(igrpmodr.into(), intid.0 as usize),
+                    SecureIntGroup::Group0 => clear_bit(igrpmodr.into(), intid.0 as usize),
+                }
+            } else {
+                set_bit(field!(self.gicd, igroupr).into(), intid.0 as usize);
+                clear_bit(field!(self.gicd, igrpmodr).into(), intid.0 as usize);
+            }
+        };
     }
 
     /// Sends a software-generated interrupt (SGI) to the given cores.
