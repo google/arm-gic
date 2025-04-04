@@ -2,10 +2,15 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- Added `AlreadyAsleep` variant to `GICRError` enum.
+
 ### Improvements
 
 - Made `IntId::is_sgi` public.
 - Made `IntId::is_*` methods const.
+- Added `GicV3::redistributor_mark_core_asleep` method.
 
 ## 0.2.2
 
