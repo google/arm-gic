@@ -6,12 +6,19 @@
 
 use super::IntId;
 use bitflags::bitflags;
-use core::cmp::min;
+use core::{
+    cmp::min,
+    fmt::{self, Debug, Formatter},
+};
+use safe_mmio::fields::{ReadPure, ReadPureWrite};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
+
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
+pub struct GicdCtlr(u32);
 
 bitflags! {
-    #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub struct GicdCtlr: u32 {
+    impl GicdCtlr: u32 {
         const RWP = 1 << 31;
         const nASSGIreq = 1 << 8;
         const E1NWF = 1 << 7;
@@ -24,10 +31,20 @@ bitflags! {
     }
 }
 
+impl Debug for GicdCtlr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "GicdCtlr(")?;
+        bitflags::parser::to_writer(self, &mut *f)?;
+        write!(f, ")")?;
+        Ok(())
+    }
+}
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
+pub struct GicrCtlr(u32);
+
 bitflags! {
-    #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub struct GicrCtlr: u32 {
+    impl GicrCtlr: u32 {
         const UWP = 1 << 31;
         const DPG1S = 1 << 26;
         const DPG1NS = 1 << 25;
@@ -39,8 +56,17 @@ bitflags! {
     }
 }
 
+impl Debug for GicrCtlr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "GicrCtlr(")?;
+        bitflags::parser::to_writer(self, &mut *f)?;
+        write!(f, ")")?;
+        Ok(())
+    }
+}
+
 /// Interrupt controller type register value.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
 #[repr(transparent)]
 pub struct Typer(u32);
 
@@ -143,9 +169,9 @@ pub enum RangeSelectorSupport {
 #[repr(C, align(8))]
 pub struct Gicd {
     /// Distributor control register.
-    pub ctlr: GicdCtlr,
+    pub ctlr: ReadPureWrite<GicdCtlr>,
     /// Interrupt controller type register.
-    pub typer: Typer,
+    pub typer: ReadPure<Typer>,
     /// Distributor implementer identification register.
     pub iidr: u32,
     /// Interrupt controller type register 2.
@@ -168,11 +194,11 @@ pub struct Gicd {
     pub clrspi_sr: u32,
     _reserved4: [u32; 9],
     /// Interrupt group registers.
-    pub igroupr: [u32; 32],
+    pub igroupr: [ReadPureWrite<u32>; 32],
     /// Interrupt set-enable registers.
-    pub isenabler: [u32; 32],
+    pub isenabler: [ReadPureWrite<u32>; 32],
     /// Interrupt clear-enable registers.
-    pub icenabler: [u32; 32],
+    pub icenabler: [ReadPureWrite<u32>; 32],
     /// Interrupt set-pending registers.
     pub ispendr: [u32; 32],
     /// Interrupt clear-pending registers.
@@ -182,13 +208,13 @@ pub struct Gicd {
     /// Interrupt clear-active registers.
     pub icactiver: [u32; 32],
     /// Interrupt priority registers.
-    pub ipriorityr: [u8; 1024],
+    pub ipriorityr: [ReadPureWrite<u8>; 1024],
     /// Interrupt processor targets registers.
     pub itargetsr: [u32; 256],
     /// Interrupt configuration registers.
-    pub icfgr: [u32; 64],
+    pub icfgr: [ReadPureWrite<u32>; 64],
     /// Interrupt group modifier registers.
-    pub igrpmodr: [u32; 32],
+    pub igrpmodr: [ReadPureWrite<u32>; 32],
     _reserved5: [u32; 32],
     /// Non-secure access control registers.
     pub nsacr: [u32; 64],
@@ -203,13 +229,13 @@ pub struct Gicd {
     /// Non-maskable interrupt registers.
     pub inmir: [u32; 32],
     /// Interrupt group registers for extended SPI range.
-    pub igroupr_e: [u32; 32],
+    pub igroupr_e: [ReadPureWrite<u32>; 32],
     _reserved8: [u32; 96],
     /// Interrupt set-enable registers for extended SPI range.
-    pub isenabler_e: [u32; 32],
+    pub isenabler_e: [ReadPureWrite<u32>; 32],
     _reserved9: [u32; 96],
     /// Interrupt clear-enable registers for extended SPI range.
-    pub icenabler_e: [u32; 32],
+    pub icenabler_e: [ReadPureWrite<u32>; 32],
     _reserved10: [u32; 96],
     /// Interrupt set-pending registers for extended SPI range.
     pub ispendr_e: [u32; 32],
@@ -224,13 +250,13 @@ pub struct Gicd {
     pub icactive_e: [u32; 32],
     _reserved14: [u32; 224],
     /// Interrupt priority registers for extended SPI range.
-    pub ipriorityr_e: [u8; 1024],
+    pub ipriorityr_e: [ReadPureWrite<u8>; 1024],
     _reserved15: [u32; 768],
     /// Extended SPI configuration registers.
-    pub icfgr_e: [u32; 64],
+    pub icfgr_e: [ReadPureWrite<u32>; 64],
     _reserved16: [u32; 192],
     /// Interrupt group modifier registers for extended SPI range.
-    pub igrpmodr_e: [u32; 32],
+    pub igrpmodr_e: [ReadPureWrite<u32>; 32],
     _reserved17: [u32; 96],
     /// Non-secure access control registers for extended SPI range.
     pub nsacr_e: [u32; 32],
@@ -250,20 +276,37 @@ pub struct Gicd {
     pub id_registers: [u32; 12],
 }
 
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
+pub struct Waker(u32);
+
+impl Debug for Waker {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "Waker(")?;
+        bitflags::parser::to_writer(self, &mut *f)?;
+        write!(f, ")")?;
+        Ok(())
+    }
+}
 bitflags! {
-    #[repr(transparent)]
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub struct Waker: u32 {
+    impl Waker: u32 {
         const CHILDREN_ASLEEP = 1 << 2;
         const PROCESSOR_SLEEP = 1 << 1;
     }
+}
+
+/// GIC Redistributor, SGI and PPI registers.
+#[repr(C, align(8))]
+pub struct GicrSgi {
+    pub gicr: Gicr,
+    pub sgi: Sgi,
 }
 
 /// GIC Redistributor registers.
 #[repr(C, align(8))]
 pub struct Gicr {
     /// Redistributor control register.
-    pub ctlr: GicrCtlr,
+    pub ctlr: ReadPureWrite<GicrCtlr>,
     /// Implementer identification register.
     pub iidr: u32,
     /// Redistributor type register.
@@ -271,7 +314,7 @@ pub struct Gicr {
     /// Error reporting status register.
     pub statusr: u32,
     /// Redistributor wake register.
-    pub waker: Waker,
+    pub waker: ReadPureWrite<Waker>,
     /// Report maximum PARTID and PMG register.
     pub mpamidr: u32,
     /// Set PARTID and PMG register.
@@ -314,19 +357,19 @@ pub struct Gicr {
 pub struct Sgi {
     _reserved0: [u32; 32],
     /// Interrupt group register 0.
-    pub igroupr0: u32,
+    pub igroupr0: ReadPureWrite<u32>,
     /// Interrupt group registers for extended PPI range.
-    pub igroupr_e: [u32; 2],
+    pub igroupr_e: [ReadPureWrite<u32>; 2],
     _reserved1: [u32; 29],
     /// Interrupt set-enable register 0.
-    pub isenabler0: u32,
+    pub isenabler0: ReadPureWrite<u32>,
     /// Interrupt set-enable registers for extended PPI range.
-    pub isenabler_e: [u32; 2],
+    pub isenabler_e: [ReadPureWrite<u32>; 2],
     _reserved2: [u32; 29],
     /// Interrupt clear-enable register 0.
-    pub icenabler0: u32,
+    pub icenabler0: ReadPureWrite<u32>,
     /// Interrupt clear-enable registers for extended PPI range.
-    pub icenabler_e: [u32; 2],
+    pub icenabler_e: [ReadPureWrite<u32>; 2],
     _reserved3: [u32; 29],
     /// Interrupt set-pending register 0.
     pub ispendr0: u32,
@@ -349,18 +392,18 @@ pub struct Sgi {
     pub icactive_e: [u32; 2],
     _reserved7: [u32; 29],
     /// Interrupt priority registers.
-    pub ipriorityr: [u8; 32],
+    pub ipriorityr: [ReadPureWrite<u8>; 32],
     /// Interrupt priority registers for extended PPI range.
-    pub ipriorityr_e: [u8; 64],
+    pub ipriorityr_e: [ReadPureWrite<u8>; 64],
     _reserved8: [u32; 488],
     /// SGI configuration register, PPI configuration register and extended PPI configuration
     /// registers.
-    pub icfgr: [u32; 6],
+    pub icfgr: [ReadPureWrite<u32>; 6],
     _reserved9: [u32; 58],
     /// Interrupt group modifier register 0.
-    pub igrpmodr0: u32,
+    pub igrpmodr0: ReadPureWrite<u32>,
     /// Interrupt group modifier registers for extended PPI range.
-    pub igrpmodr_e: [u32; 2],
+    pub igrpmodr_e: [ReadPureWrite<u32>; 2],
     _reserved10: [u32; 61],
     /// Non-secure access control register.
     pub nsacr: u32,
@@ -399,5 +442,11 @@ mod tests {
         assert_eq!(Typer(1 << 11).num_lpis(), 4);
         assert_eq!(Typer(2 << 11).num_lpis(), 8);
         assert_eq!(Typer(16 << 11).num_lpis(), 1 << 17);
+    }
+
+    #[test]
+    fn gicr_size() {
+        // The size of the Gicr struct should match the offset from `RD_base` to `SGI_base`.
+        assert_eq!(size_of::<Gicr>(), 0x10000);
     }
 }

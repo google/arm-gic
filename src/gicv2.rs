@@ -4,20 +4,22 @@
 
 //! Driver for the Arm Generic Interrupt Controller version 2.
 
-mod registers;
+pub mod registers;
 
 pub use self::registers::Typer;
 use self::registers::{Gicc, Gicd, GicdCtlr};
 use crate::{IntId, Trigger};
+use core::ptr::NonNull;
+use safe_mmio::{field, field_shared, UniqueMmioPointer};
 
 /// Driver for an Arm Generic Interrupt Controller version 2.
 #[derive(Debug)]
-pub struct GicV2 {
-    gicd: *mut Gicd,
-    gicc: *mut Gicc,
+pub struct GicV2<'a> {
+    gicd: UniqueMmioPointer<'a, Gicd>,
+    gicc: UniqueMmioPointer<'a, Gicc>,
 }
 
-impl GicV2 {
+impl GicV2<'_> {
     /// Constructs a new instance of the driver for a GIC with the given distributor and
     /// controller base addresses.
     ///
@@ -27,33 +29,27 @@ impl GicV2 {
     /// respectively. These regions must be mapped into the address space of the process as device
     /// memory, and not have any other aliases, either via another instance of this driver or
     /// otherwise.
-    pub unsafe fn new(gicd: *mut u64, gicc: *mut u64) -> Self {
+    pub unsafe fn new(gicd: *mut Gicd, gicc: *mut Gicc) -> Self {
         Self {
-            gicd: gicd as _,
-            gicc: gicc as _,
+            gicd: UniqueMmioPointer::new(NonNull::new(gicd).unwrap()),
+            gicc: UniqueMmioPointer::new(NonNull::new(gicc).unwrap()),
         }
     }
 
     /// Returns information about what the GIC implementation supports.
     pub fn typer(&self) -> Typer {
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a GIC
-        // distributor interface.
-        unsafe { (&raw mut (*self.gicd).typer).read_volatile() }
+        field_shared!(self.gicd, typer).read()
     }
 
     /// Initialises the GIC.
     pub fn setup(&mut self) {
-        // SAFETY: Both registers `self.gicd` and `self.gicc` are valid and unique pointers to
-        // the hardware interfaces provided by the user.
-        unsafe {
-            (&raw mut (*self.gicd).ctlr).write_volatile(GicdCtlr::EnableGrp1);
-            for i in 0..32 {
-                (&raw mut (*self.gicd).igroupr[i]).write_volatile(0xffffffff);
-            }
-
-            (&raw mut (*self.gicc).ctlr).write_volatile(0b1);
-            (&raw mut (*self.gicc).pmr).write_volatile(0xff);
+        field!(self.gicd, ctlr).write(GicdCtlr::EnableGrp1);
+        for i in 0..32 {
+            field!(self.gicd, igroupr).get(i).unwrap().write(0xffffffff);
         }
+
+        field!(self.gicc, ctlr).write(0b1);
+        field!(self.gicc, pmr).write(0xff);
     }
 
     /// Enables or disables the interrupt with the given ID.
@@ -62,20 +58,18 @@ impl GicV2 {
         let bit = 1 << (intid.0 % 32);
 
         if enable {
-            // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-            // GIC distributor interface.
-            unsafe {
-                (&raw mut (*self.gicd).isenabler[index]).write_volatile(bit);
-                if ((&raw const (*self.gicd).isenabler[index]).read_volatile() & bit) == 0 {
-                    return Err(());
-                }
+            field!(self.gicd, isenabler).get(index).unwrap().write(bit);
+            if (field_shared!(self.gicd, isenabler)
+                .get(index)
+                .unwrap()
+                .read()
+                & bit)
+                == 0
+            {
+                return Err(());
             }
         } else {
-            // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-            // GIC distributor interface.
-            unsafe {
-                (&raw mut (*self.gicd).icenabler[index]).write(bit);
-            }
+            field!(self.gicd, icenabler).get(index).unwrap().write(bit);
         }
         Ok(())
     }
@@ -84,17 +78,15 @@ impl GicV2 {
     pub fn enable_all_interrupts(&mut self, enable: bool) {
         for i in 0..32 {
             if enable {
-                // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
-                // of a GIC distributor interface.
-                unsafe {
-                    (&raw mut (*self.gicd).isenabler[i]).write_volatile(0xffffffff);
-                }
+                field!(self.gicd, isenabler)
+                    .get(i)
+                    .unwrap()
+                    .write(0xffffffff);
             } else {
-                // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers
-                // of a GIC distributor interface.
-                unsafe {
-                    (&raw mut (*self.gicd).icenabler[i]).write_volatile(0xffffffff);
-                }
+                field!(self.gicd, icenabler)
+                    .get(i)
+                    .unwrap()
+                    .write(0xffffffff);
             }
         }
     }
@@ -103,10 +95,7 @@ impl GicV2 {
     ///
     /// Only interrupts with a higher priority (numerically lower) will be signalled.
     pub fn set_priority_mask(&mut self, min_priority: u8) {
-        // SAFETY: The existence of the PMR Register is guaranteed by the user.
-        unsafe {
-            (&raw mut (*self.gicc).pmr).write_volatile(min_priority as u32);
-        }
+        field!(self.gicc, pmr).write(min_priority as u32);
     }
 
     /// Sets the priority of the interrupt with the given ID.
@@ -116,11 +105,10 @@ impl GicV2 {
     pub fn set_interrupt_priority(&mut self, intid: IntId, priority: u8) {
         let idx = intid.0 as usize / 4;
         let priority = (priority as u32) << (8 * (intid.0 % 4));
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-        // GIC distributor interface.
-        unsafe {
-            (&raw mut (*self.gicd).ipriorityr[idx]).write_volatile(priority);
-        }
+        field!(self.gicd, ipriorityr)
+            .get(idx)
+            .unwrap()
+            .write(priority);
     }
 
     /// Configures the trigger type for the interrupt with the given ID.
@@ -128,18 +116,15 @@ impl GicV2 {
         let index = (intid.0 / 16) as usize;
         let bit = 1 << (((intid.0 % 16) * 2) + 1);
 
-        // SAFETY: We know that `self.gicd` is a valid and unique pointer to the registers of a
-        // GIC distributor interface.
         // Affinity routing is not available. So instead use the icfgr register present on all
         // GICD interfaces (present as guaranteed by the user) to set trigger modes.
-        unsafe {
-            let register = (&raw mut (*self.gicd).icfgr[index]);
-            let v = register.read_volatile();
-            register.write_volatile(match trigger {
-                Trigger::Edge => v | bit,
-                Trigger::Level => v & !bit,
-            });
-        }
+        let mut icfgr = field!(self.gicd, icfgr);
+        let mut register = icfgr.get(index).unwrap();
+        let v = register.read();
+        register.write(match trigger {
+            Trigger::Edge => v | bit,
+            Trigger::Level => v & !bit,
+        });
     }
 
     /// Sends a software-generated interrupt (SGI) to the given cores.
@@ -153,31 +138,24 @@ impl GicV2 {
                 target_list,
             } => {
                 (intid.0 & 0xf)
-                    | match target_list_filter {
+                    | (match target_list_filter {
                         SgiTargetListFilter::CPUTargetList => 0b00,
                         SgiTargetListFilter::ForwardOthersOnly => 0b01,
                         SgiTargetListFilter::ForwardSelfOnly => 0b10,
-                    } << 24
-                    | u32::from(target_list & 0xff) << 16
-                    | 1u32 << 15
+                    } << 24)
+                    | (u32::from(target_list & 0xff) << 16)
+                    | (1u32 << 15)
             }
         };
 
-        // SAFETY: As guaranteed by the user, the gicd is a valid pointer to a GIC distributor
-        // which always contains the sgir register.
-        unsafe {
-            (&raw mut (*self.gicd).sgir).write_volatile(sgi_value);
-        }
+        field!(self.gicd, sgir).write(sgi_value);
     }
 
     /// Gets the ID of the highest priority signalled interrupt, and acknowledges it.
     ///
     /// Returns `None` if there is no ptending interrupt of sufficient priority.
     pub fn get_and_acknowledge_interrupt(&mut self) -> Option<IntId> {
-        let intid = IntId(
-            // SAFETY: This memory access is guaranteed by the user passing along a valid GICD address.
-            unsafe { (&raw mut (*self.gicc).aiar).read_volatile() },
-        );
+        let intid = IntId(field!(self.gicc, aiar).read());
         if intid == IntId::SPECIAL_NONE {
             None
         } else {
@@ -188,10 +166,7 @@ impl GicV2 {
     /// Informs the interrupt controller that the CPU has completed processing the given interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
     pub fn end_interrupt(&mut self, intid: IntId) {
-        // SAFETY: The gicc is a valid pointer as guaranteed by the user. The aeoir register is always present.
-        unsafe {
-            (&raw mut (*self.gicc).aeoir).write_volatile(intid.0);
-        }
+        field!(self.gicc, aeoir).write(intid.0);
     }
 }
 
