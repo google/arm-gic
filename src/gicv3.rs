@@ -13,13 +13,10 @@ use crate::sysreg::{
 };
 use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
-use registers::Typer;
+use registers::{GicrSgi, Typer};
 use safe_mmio::fields::ReadPureWrite;
-use safe_mmio::{field, field_shared, UniqueMmioPointer};
+use safe_mmio::{field, field_shared, split_fields, UniqueMmioPointer};
 use thiserror::Error;
-
-/// The offset in bytes from `RD_base` to `SGI_base`.
-const SGI_OFFSET: usize = 0x10000;
 
 /// An error which may be returned from operations on a GIC Redistributor.
 #[derive(Error, Debug, Clone, Copy, Eq, PartialEq)]
@@ -63,7 +60,7 @@ fn clear_bit(registers: UniqueMmioPointer<[ReadPureWrite<u32>]>, nth: usize) {
 #[derive(Debug)]
 pub struct GicV3<'a> {
     gicd: UniqueMmioPointer<'a, Gicd>,
-    gicr_base: *mut Gicr,
+    gicr_base: *mut GicrSgi,
     /// The number of CPU cores, and hence redistributors.
     cpu_count: usize,
     /// The offset in bytes between the start of redistributor frames.
@@ -344,11 +341,8 @@ impl GicV3<'_> {
         self.gicd.reborrow()
     }
 
-    /// Returns a pointer to the GIC redistributor registers.
-    ///
-    /// This may be used to read and write the registers directly for functionality not yet
-    /// supported by this driver.
-    pub fn gicr_ptr(&mut self, cpu: usize) -> UniqueMmioPointer<Gicr> {
+    /// Returns a pointer to the GIC redistributor, SGI and PPI registers.
+    fn gicr_sgi_ptr(&mut self, cpu: usize) -> UniqueMmioPointer<GicrSgi> {
         assert!(cpu < self.cpu_count);
         // SAFETY: The caller of `GicV3::new` promised that `gicr_base` and `gicr_stride` were valid
         // and there are no aliases.
@@ -359,24 +353,22 @@ impl GicV3<'_> {
         }
     }
 
+    /// Returns a pointer to the GIC redistributor registers.
+    ///
+    /// This may be used to read and write the registers directly for functionality not yet
+    /// supported by this driver.
+    pub fn gicr_ptr(&mut self, cpu: usize) -> UniqueMmioPointer<Gicr> {
+        // SAFETY: We only split out a single field.
+        unsafe { split_fields!(self.gicr_sgi_ptr(cpu), gicr) }
+    }
+
     /// Returns a pointer to the GIC redistributor SGI and PPI registers.
     ///
     /// This may be used to read and write the registers directly for functionality not yet
     /// supported by this driver.
     pub fn sgi_ptr(&mut self, cpu: usize) -> UniqueMmioPointer<Sgi> {
-        assert!(cpu < self.cpu_count);
-        // SAFETY: The caller of `GicV3::new` promised that `gicr_base` and `gicr_stride` were valid
-        // and there are no aliases.
-        unsafe {
-            UniqueMmioPointer::new(
-                NonNull::new(
-                    self.gicr_base
-                        .wrapping_byte_add(cpu * self.gicr_stride + SGI_OFFSET)
-                        .cast(),
-                )
-                .unwrap(),
-            )
-        }
+        // SAFETY: We only split out a single field.
+        unsafe { split_fields!(self.gicr_sgi_ptr(cpu), sgi) }
     }
 
     fn gicd_barrier(&self) {

@@ -295,6 +295,13 @@ bitflags! {
     }
 }
 
+/// GIC Redistributor, SGI and PPI registers.
+#[repr(C, align(8))]
+pub struct GicrSgi {
+    pub gicr: Gicr,
+    pub sgi: Sgi,
+}
+
 /// GIC Redistributor registers.
 #[repr(C, align(8))]
 pub struct Gicr {
@@ -435,5 +442,11 @@ mod tests {
         assert_eq!(Typer(1 << 11).num_lpis(), 4);
         assert_eq!(Typer(2 << 11).num_lpis(), 8);
         assert_eq!(Typer(16 << 11).num_lpis(), 1 << 17);
+    }
+
+    #[test]
+    fn gicr_size() {
+        // The size of the Gicr struct should match the offset from `RD_base` to `SGI_base`.
+        assert_eq!(size_of::<Gicr>(), 0x10000);
     }
 }
