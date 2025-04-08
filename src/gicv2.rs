@@ -138,13 +138,13 @@ impl GicV2 {
                 target_list,
             } => {
                 (intid.0 & 0xf)
-                    | match target_list_filter {
+                    | (match target_list_filter {
                         SgiTargetListFilter::CPUTargetList => 0b00,
                         SgiTargetListFilter::ForwardOthersOnly => 0b01,
                         SgiTargetListFilter::ForwardSelfOnly => 0b10,
-                    } << 24
-                    | u32::from(target_list & 0xff) << 16
-                    | 1u32 << 15
+                    } << 24)
+                    | (u32::from(target_list & 0xff) << 16)
+                    | (1u32 << 15)
             }
         };
 
