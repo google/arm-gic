@@ -78,8 +78,8 @@ impl GicV3<'_> {
     /// memory, and not have any other aliases, either via another instance of this driver or
     /// otherwise.
     pub unsafe fn new(
-        gicd: *mut u64,
-        gicr_base: *mut u64,
+        gicd: *mut Gicd,
+        gicr_base: *mut GicrSgi,
         cpu_count: usize,
         gicr_stride: usize,
     ) -> Self {
@@ -87,8 +87,8 @@ impl GicV3<'_> {
         Self {
             // SAFETY: Our caller promised that `gicd` is a valid and unique pointer to a GIC
             // distributor.
-            gicd: unsafe { UniqueMmioPointer::new(NonNull::new(gicd.cast()).unwrap()) },
-            gicr_base: gicr_base as _,
+            gicd: unsafe { UniqueMmioPointer::new(NonNull::new(gicd).unwrap()) },
+            gicr_base: gicr_base,
             cpu_count,
             gicr_stride,
         }

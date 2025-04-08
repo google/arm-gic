@@ -8,12 +8,14 @@
 - Changed `GicV3::gicd_ptr`, `GicV3::gicr_ptr` and `GicV3::sgi_ptr` to return a `UniqueMmioPointer`.
 - `GicV2` and `GicV3` now have a lifetime parameter, indicating the lifetime for which the driver
   has exclusive access to the MMIO regions of the GIC.
+- `GicV2::new` and `GicV3::new` now take pointers to register struct types rather than `*mut u64`.
 
 ### Improvements
 
 - Made `IntId::is_sgi` public.
 - Made `IntId::is_*` methods const.
 - Added `GicV3::redistributor_mark_core_asleep` method.
+- Made `gicv2::registers` public.
 
 ## 0.2.2
 

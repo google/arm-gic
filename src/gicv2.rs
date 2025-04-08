@@ -4,7 +4,7 @@
 
 //! Driver for the Arm Generic Interrupt Controller version 2.
 
-mod registers;
+pub mod registers;
 
 pub use self::registers::Typer;
 use self::registers::{Gicc, Gicd, GicdCtlr};
@@ -29,10 +29,10 @@ impl GicV2<'_> {
     /// respectively. These regions must be mapped into the address space of the process as device
     /// memory, and not have any other aliases, either via another instance of this driver or
     /// otherwise.
-    pub unsafe fn new(gicd: *mut u64, gicc: *mut u64) -> Self {
+    pub unsafe fn new(gicd: *mut Gicd, gicc: *mut Gicc) -> Self {
         Self {
-            gicd: UniqueMmioPointer::new(NonNull::new(gicd.cast()).unwrap()),
-            gicc: UniqueMmioPointer::new(NonNull::new(gicc.cast()).unwrap()),
+            gicd: UniqueMmioPointer::new(NonNull::new(gicd).unwrap()),
+            gicc: UniqueMmioPointer::new(NonNull::new(gicc).unwrap()),
         }
     }
 
