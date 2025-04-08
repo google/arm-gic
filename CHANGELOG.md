@@ -6,6 +6,8 @@
 
 - Added `AlreadyAsleep` variant to `GICRError` enum.
 - Changed `GicV3::gicd_ptr`, `GicV3::gicr_ptr` and `GicV3::sgi_ptr` to return a `UniqueMmioPointer`.
+- `GicV2` and `GicV3` now have a lifetime parameter, indicating the lifetime for which the driver
+  has exclusive access to the MMIO regions of the GIC.
 
 ### Improvements
 

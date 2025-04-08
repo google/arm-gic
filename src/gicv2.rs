@@ -14,12 +14,12 @@ use safe_mmio::{field, field_shared, UniqueMmioPointer};
 
 /// Driver for an Arm Generic Interrupt Controller version 2.
 #[derive(Debug)]
-pub struct GicV2 {
-    gicd: UniqueMmioPointer<'static, Gicd>,
-    gicc: UniqueMmioPointer<'static, Gicc>,
+pub struct GicV2<'a> {
+    gicd: UniqueMmioPointer<'a, Gicd>,
+    gicc: UniqueMmioPointer<'a, Gicc>,
 }
 
-impl GicV2 {
+impl GicV2<'_> {
     /// Constructs a new instance of the driver for a GIC with the given distributor and
     /// controller base addresses.
     ///

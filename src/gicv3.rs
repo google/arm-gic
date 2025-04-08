@@ -61,8 +61,8 @@ fn clear_bit(registers: UniqueMmioPointer<[ReadPureWrite<u32>]>, nth: usize) {
 
 /// Driver for an Arm Generic Interrupt Controller version 3 (or 4).
 #[derive(Debug)]
-pub struct GicV3 {
-    gicd: UniqueMmioPointer<'static, Gicd>,
+pub struct GicV3<'a> {
+    gicd: UniqueMmioPointer<'a, Gicd>,
     gicr_base: *mut Gicr,
     /// The number of CPU cores, and hence redistributors.
     cpu_count: usize,
@@ -70,7 +70,7 @@ pub struct GicV3 {
     gicr_stride: usize,
 }
 
-impl GicV3 {
+impl GicV3<'_> {
     /// Constructs a new instance of the driver for a GIC with the given distributor and
     /// redistributor base addresses.
     ///
@@ -462,10 +462,10 @@ impl GicV3 {
 }
 
 // SAFETY: The GIC interface can be accessed from any CPU core.
-unsafe impl Send for GicV3 {}
+unsafe impl Send for GicV3<'_> {}
 
 // SAFETY: Any operations which change state require `&mut GicV3`, so `&GicV3` is fine to share.
-unsafe impl Sync for GicV3 {}
+unsafe impl Sync for GicV3<'_> {}
 
 /// The group configuration for an interrupt.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
