@@ -371,7 +371,7 @@ impl GicV3<'_> {
         unsafe { split_fields!(self.gicr_sgi_ptr(cpu), sgi) }
     }
 
-    fn gicd_barrier(&self) {
+    pub fn gicd_barrier(&self) {
         while field_shared!(self.gicd, ctlr)
             .read()
             .contains(GicdCtlr::RWP)
