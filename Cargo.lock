@@ -38,9 +38,9 @@ dependencies = [
 
 [[package]]
 name = "safe-mmio"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3e948e938362b65d7997a12bde3ff3112a7971e5e9a4951012a7cde5f4133a0"
+checksum = "db02a82ad13df46afeba34a4e54065fa912308b9101b060e4422898eac0e06f6"
 dependencies = [
  "zerocopy",
 ]
