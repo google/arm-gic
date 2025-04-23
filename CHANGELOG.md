@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+### Breaking changes
+
+- Changed `GicV3::new` to take flag indicating whether GIC is v3 or v4, rather than GICR stride.
+- Added new `gicv3::registers::GicrType` bitflags type and used it for `Gicr.typer` register field.
+
+### Improvements
+
+- Made `GicV3::gicd_barrier` public.
+
 ## 0.3.0
 
 ### Breaking changes
