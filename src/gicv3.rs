@@ -13,7 +13,7 @@ use crate::sysreg::{
 };
 use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
-use registers::{GicrSgi, Typer};
+use registers::{GicrSgi, GicrTyper, Typer};
 use safe_mmio::fields::ReadPureWrite;
 use safe_mmio::{field, field_shared, split_fields, UniqueMmioPointer};
 use thiserror::Error;
@@ -67,6 +67,31 @@ pub struct GicV3<'a> {
     gicr_stride: usize,
 }
 
+fn get_redistributor_window_size(gicr_base: *mut GicrSgi, gic_v4: bool) -> usize {
+    if !gic_v4 {
+        return size_of::<GicrSgi>();
+    }
+
+    // SAFETY: The caller of `GicV3::new` promised that `gicr_base` was valid
+    // and there are no aliases.
+    let first_gicr_window = unsafe { UniqueMmioPointer::new(NonNull::new(gicr_base).unwrap()) };
+
+    // SAFETY: We only split out a single field.
+    let first_gicr = unsafe { split_fields!(first_gicr_window, gicr) };
+
+    if field_shared!(first_gicr, typer)
+        .read()
+        .contains(GicrTyper::VLPIS)
+    {
+        // In this case GicV4 adds 2 frames:
+        // vlpi: 64KiB
+        // reserved: 64KiB
+        return size_of::<GicrSgi>() * 2;
+    }
+
+    size_of::<GicrSgi>()
+}
+
 impl GicV3<'_> {
     /// Constructs a new instance of the driver for a GIC with the given distributor and
     /// redistributor base addresses.
@@ -81,16 +106,15 @@ impl GicV3<'_> {
         gicd: *mut Gicd,
         gicr_base: *mut GicrSgi,
         cpu_count: usize,
-        gicr_stride: usize,
+        gic_v4: bool,
     ) -> Self {
-        assert_eq!(gicr_stride % 0x20000, 0);
         Self {
             // SAFETY: Our caller promised that `gicd` is a valid and unique pointer to a GIC
             // distributor.
             gicd: unsafe { UniqueMmioPointer::new(NonNull::new(gicd).unwrap()) },
-            gicr_base: gicr_base,
+            gicr_base,
             cpu_count,
-            gicr_stride,
+            gicr_stride: get_redistributor_window_size(gicr_base, gic_v4),
         }
     }
 
