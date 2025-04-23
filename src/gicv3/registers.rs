@@ -65,6 +65,16 @@ impl Debug for GicrCtlr {
     }
 }
 
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
+pub struct GicrTyper(u64);
+
+bitflags! {
+    impl GicrTyper: u64 {
+        const VLPIS = 1 << 1;
+    }
+}
+
 /// Interrupt controller type register value.
 #[derive(Clone, Copy, Debug, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
 #[repr(transparent)]
@@ -310,7 +320,7 @@ pub struct Gicr {
     /// Implementer identification register.
     pub iidr: u32,
     /// Redistributor type register.
-    pub typer: u64,
+    pub typer: ReadPure<GicrTyper>,
     /// Error reporting status register.
     pub statusr: u32,
     /// Redistributor wake register.
