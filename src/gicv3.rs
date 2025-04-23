@@ -76,8 +76,7 @@ fn get_redistributor_window_size(gicr_base: *mut GicrSgi, gic_v4: bool) -> usize
     // and there are no aliases.
     let first_gicr_window = unsafe { UniqueMmioPointer::new(NonNull::new(gicr_base).unwrap()) };
 
-    // SAFETY: We only split out a single field.
-    let first_gicr = unsafe { split_fields!(first_gicr_window, gicr) };
+    let first_gicr = field_shared!(first_gicr_window, gicr);
 
     if field_shared!(first_gicr, typer)
         .read()
