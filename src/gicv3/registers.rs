@@ -65,13 +65,23 @@ impl Debug for GicrCtlr {
     }
 }
 
+/// Interrupt controller redistributor type register value.
 #[repr(transparent)]
 #[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
 pub struct GicrTyper(u64);
 
 bitflags! {
     impl GicrTyper: u64 {
+        /// The redistributor supports Disable Processor Group.
+        const DPGS = 1 << 5;
+        /// This redistributor is the last redistributor on the chip.
+        const Last = 1 << 4;
+        /// Direct injection of LPIs is supported.
+        const DirectLPI = 1 << 3;
+        /// Virtual LPIs are supported.
         const VLPIS = 1 << 1;
+        /// Physical LPIs are supported.
+        const PLIPS = 1 << 0;
     }
 }
 
