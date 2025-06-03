@@ -75,10 +75,10 @@ macro_rules! write_sysreg64 {
         #[doc = stringify!($sysreg)]
         #[doc = " system register"]
         pub fn $function_name(value: u64) {
-            // SAFETY: The caller of the macro guarantees that this system register is safe to
-            // write.
             let value_lo = value as u32;
             let value_hi = (value >> 32) as u32;
+            // SAFETY: The caller of the macro guarantees that this system register is safe to
+            // write.
             unsafe {
                 core::arch::asm!(
                     concat!(
