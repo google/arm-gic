@@ -12,12 +12,18 @@ pub static SYSREGS: Mutex<SystemRegisters> = Mutex::new(SystemRegisters::new());
 /// A set of fake system registers.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SystemRegisters {
+    pub icc_asgi1r_el1: u64,
+    pub icc_iar0_el1: u32,
     pub icc_iar1_el1: u32,
     pub icc_ctlr_el1: u32,
+    pub icc_eoir0_el1: u32,
     pub icc_eoir1_el1: u32,
+    pub icc_hppir0_el1: u32,
+    pub icc_hppir1_el1: u32,
     pub icc_igrpen0_el1: u32,
     pub icc_igrpen1_el1: u32,
     pub icc_pmr_el1: u32,
+    pub icc_sgi0r_el1: u64,
     pub icc_sgi1r_el1: u64,
     pub icc_sre_el1: u32,
 }
@@ -25,12 +31,18 @@ pub struct SystemRegisters {
 impl SystemRegisters {
     const fn new() -> Self {
         Self {
+            icc_asgi1r_el1: 0,
+            icc_iar0_el1: 0,
             icc_iar1_el1: 0,
             icc_ctlr_el1: 0,
+            icc_eoir0_el1: 0,
             icc_eoir1_el1: 0,
+            icc_hppir0_el1: 0,
+            icc_hppir1_el1: 0,
             icc_igrpen0_el1: 0,
             icc_igrpen1_el1: 0,
             icc_pmr_el1: 0,
+            icc_sgi0r_el1: 0,
             icc_sgi1r_el1: 0,
             icc_sre_el1: 0,
         }

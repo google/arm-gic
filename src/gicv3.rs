@@ -8,8 +8,10 @@ pub mod registers;
 
 use self::registers::{Gicd, GicdCtlr, Gicr, GicrCtlr, Sgi, Waker};
 use crate::sysreg::{
-    read_icc_iar1_el1, write_icc_ctlr_el1, write_icc_eoir1_el1, write_icc_igrpen0_el1,
-    write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
+    read_icc_hppir0_el1, read_icc_hppir1_el1, read_icc_iar0_el1, read_icc_iar1_el1,
+    write_icc_asgi1r_el1, write_icc_ctlr_el1, write_icc_eoir0_el1, write_icc_eoir1_el1,
+    write_icc_igrpen0_el1, write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi0r_el1,
+    write_icc_sgi1r_el1, write_icc_sre_el1,
 };
 use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
@@ -187,12 +189,10 @@ impl GicV3<'_> {
             } else {
                 set_bit(field!(sgi, icenabler0).into(), intid.0 as usize);
             }
+        } else if enable {
+            set_bit(field!(self.gicd, isenabler).into(), intid.0 as usize);
         } else {
-            if enable {
-                set_bit(field!(self.gicd, isenabler).into(), intid.0 as usize);
-            } else {
-                set_bit(field!(self.gicd, icenabler).into(), intid.0 as usize);
-            }
+            set_bit(field!(self.gicd, icenabler).into(), intid.0 as usize);
         };
     }
 
@@ -289,24 +289,22 @@ impl GicV3<'_> {
                 set_bit(field!(sgi, igroupr0).into(), intid.0 as usize);
                 clear_bit(field!(sgi, igrpmodr0).into(), intid.0 as usize);
             }
-        } else {
-            if let Group::Secure(sg) = group {
-                let igroupr = field!(self.gicd, igroupr);
-                clear_bit(igroupr.into(), intid.0 as usize);
-                let igrpmodr = field!(self.gicd, igrpmodr);
-                match sg {
-                    SecureIntGroup::Group1S => set_bit(igrpmodr.into(), intid.0 as usize),
-                    SecureIntGroup::Group0 => clear_bit(igrpmodr.into(), intid.0 as usize),
-                }
-            } else {
-                set_bit(field!(self.gicd, igroupr).into(), intid.0 as usize);
-                clear_bit(field!(self.gicd, igrpmodr).into(), intid.0 as usize);
+        } else if let Group::Secure(sg) = group {
+            let igroupr = field!(self.gicd, igroupr);
+            clear_bit(igroupr.into(), intid.0 as usize);
+            let igrpmodr = field!(self.gicd, igrpmodr);
+            match sg {
+                SecureIntGroup::Group1S => set_bit(igrpmodr.into(), intid.0 as usize),
+                SecureIntGroup::Group0 => clear_bit(igrpmodr.into(), intid.0 as usize),
             }
+        } else {
+            set_bit(field!(self.gicd, igroupr).into(), intid.0 as usize);
+            clear_bit(field!(self.gicd, igrpmodr).into(), intid.0 as usize);
         };
     }
 
-    /// Sends a software-generated interrupt (SGI) to the given cores.
-    pub fn send_sgi(intid: IntId, target: SgiTarget) {
+    /// Sends a group `group` software-generated interrupt (SGI) to the given cores.
+    pub fn send_sgi(intid: IntId, target: SgiTarget, group: SgiTargetGroup) {
         assert!(intid.is_sgi());
 
         let sgi_value = match target {
@@ -330,14 +328,24 @@ impl GicV3<'_> {
             }
         };
 
-        write_icc_sgi1r_el1(sgi_value);
+        match group {
+            SgiTargetGroup::Group0 => write_icc_sgi0r_el1(sgi_value),
+            SgiTargetGroup::CurrentGroup1 => write_icc_sgi1r_el1(sgi_value),
+            SgiTargetGroup::OtherGroup1 => write_icc_asgi1r_el1(sgi_value),
+        }
     }
 
-    /// Gets the ID of the highest priority signalled interrupt, and acknowledges it.
+    /// Gets the ID of the highest priority pending group `group` interrupt on the CPU interface.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
-    pub fn get_and_acknowledge_interrupt() -> Option<IntId> {
-        let intid = IntId(read_icc_iar1_el1());
+    pub fn get_pending_interrupt_type(group: OpInterruptGroup) -> Option<IntId> {
+        let icc_hppir = if let OpInterruptGroup::Group0 = group {
+            read_icc_hppir0_el1()
+        } else {
+            read_icc_hppir1_el1()
+        };
+
+        let intid = IntId(icc_hppir);
         if intid == IntId::SPECIAL_NONE {
             None
         } else {
@@ -345,10 +353,32 @@ impl GicV3<'_> {
         }
     }
 
-    /// Informs the interrupt controller that the CPU has completed processing the given interrupt.
+    /// Gets the ID of the highest priority signalled group `group` interrupt, and acknowledges it.
+    ///
+    /// Returns `None` if there is no pending interrupt of sufficient priority.
+    pub fn get_and_acknowledge_interrupt(group: OpInterruptGroup) -> Option<IntId> {
+        let icc_iar = if let OpInterruptGroup::Group0 = group {
+            read_icc_iar0_el1()
+        } else {
+            read_icc_iar1_el1()
+        };
+
+        let intid = IntId(icc_iar);
+        if intid == IntId::SPECIAL_NONE {
+            None
+        } else {
+            Some(intid)
+        }
+    }
+
+    /// Informs the interrupt controller that the CPU has completed processing the given group `group` interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
-    pub fn end_interrupt(intid: IntId) {
-        write_icc_eoir1_el1(intid.0)
+    pub fn end_interrupt(intid: IntId, group: OpInterruptGroup) {
+        if let OpInterruptGroup::Group0 = group {
+            write_icc_eoir0_el1(intid.0);
+        } else {
+            write_icc_eoir1_el1(intid.0);
+        }
     }
 
     /// Returns information about what the GIC implementation supports.
@@ -511,4 +541,24 @@ pub enum SgiTarget {
         affinity1: u8,
         target_list: u16,
     },
+}
+
+/// The target group specification for a software-generated interrupt.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SgiTargetGroup {
+    /// The SGI is routed to Group 0.
+    Group0,
+    /// The SGI is routed to current security state Group 1.
+    CurrentGroup1,
+    /// The SGI is routed to the other security state Group 1.
+    OtherGroup1,
+}
+
+/// To select appropriate register for interrupt ops like ACK, EOI.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum OpInterruptGroup {
+    /// Perform an action for Group 0 interrupt.
+    Group0,
+    /// Perform an action for Group 1 interrupt.
+    Group1,
 }
