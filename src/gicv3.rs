@@ -8,10 +8,10 @@ pub mod registers;
 
 use self::registers::{Gicd, GicdCtlr, Gicr, GicrCtlr, Sgi, Waker};
 use crate::sysreg::{
-    read_icc_hppir0_el1, read_icc_hppir1_el1, read_icc_iar0_el1,
-    read_icc_iar1_el1, write_icc_asgi1r_el1, write_icc_ctlr_el1, write_icc_eoir0_el1,
-    write_icc_eoir1_el1, write_icc_igrpen0_el1, write_icc_igrpen1_el1, write_icc_pmr_el1,
-    write_icc_sgi0r_el1, write_icc_sgi1r_el1, write_icc_sre_el1,
+    read_icc_hppir0_el1, read_icc_hppir1_el1, read_icc_iar0_el1, read_icc_iar1_el1,
+    write_icc_asgi1r_el1, write_icc_ctlr_el1, write_icc_eoir0_el1, write_icc_eoir1_el1,
+    write_icc_igrpen0_el1, write_icc_igrpen1_el1, write_icc_pmr_el1, write_icc_sgi0r_el1,
+    write_icc_sgi1r_el1, write_icc_sre_el1,
 };
 use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
@@ -189,12 +189,10 @@ impl GicV3<'_> {
             } else {
                 set_bit(field!(sgi, icenabler0).into(), intid.0 as usize);
             }
+        } else if enable {
+            set_bit(field!(self.gicd, isenabler).into(), intid.0 as usize);
         } else {
-            if enable {
-                set_bit(field!(self.gicd, isenabler).into(), intid.0 as usize);
-            } else {
-                set_bit(field!(self.gicd, icenabler).into(), intid.0 as usize);
-            }
+            set_bit(field!(self.gicd, icenabler).into(), intid.0 as usize);
         };
     }
 
@@ -291,19 +289,17 @@ impl GicV3<'_> {
                 set_bit(field!(sgi, igroupr0).into(), intid.0 as usize);
                 clear_bit(field!(sgi, igrpmodr0).into(), intid.0 as usize);
             }
-        } else {
-            if let Group::Secure(sg) = group {
-                let igroupr = field!(self.gicd, igroupr);
-                clear_bit(igroupr.into(), intid.0 as usize);
-                let igrpmodr = field!(self.gicd, igrpmodr);
-                match sg {
-                    SecureIntGroup::Group1S => set_bit(igrpmodr.into(), intid.0 as usize),
-                    SecureIntGroup::Group0 => clear_bit(igrpmodr.into(), intid.0 as usize),
-                }
-            } else {
-                set_bit(field!(self.gicd, igroupr).into(), intid.0 as usize);
-                clear_bit(field!(self.gicd, igrpmodr).into(), intid.0 as usize);
+        } else if let Group::Secure(sg) = group {
+            let igroupr = field!(self.gicd, igroupr);
+            clear_bit(igroupr.into(), intid.0 as usize);
+            let igrpmodr = field!(self.gicd, igrpmodr);
+            match sg {
+                SecureIntGroup::Group1S => set_bit(igrpmodr.into(), intid.0 as usize),
+                SecureIntGroup::Group0 => clear_bit(igrpmodr.into(), intid.0 as usize),
             }
+        } else {
+            set_bit(field!(self.gicd, igroupr).into(), intid.0 as usize);
+            clear_bit(field!(self.gicd, igrpmodr).into(), intid.0 as usize);
         };
     }
 
