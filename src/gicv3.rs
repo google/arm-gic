@@ -338,11 +338,10 @@ impl GicV3<'_> {
     /// Gets the ID of the highest priority pending group `group` interrupt on the CPU interface.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
-    pub fn get_pending_interrupt_type(group: OpInterruptGroup) -> Option<IntId> {
-        let icc_hppir = if let OpInterruptGroup::Group0 = group {
-            read_icc_hppir0_el1()
-        } else {
-            read_icc_hppir1_el1()
+    pub fn get_pending_interrupt(group: InterruptGroup) -> Option<IntId> {
+        let icc_hppir = match group {
+            InterruptGroup::Group0 => read_icc_hppir0_el1(),
+            InterruptGroup::Group1 => read_icc_hppir1_el1(),
         };
 
         let intid = IntId(icc_hppir);
@@ -356,11 +355,10 @@ impl GicV3<'_> {
     /// Gets the ID of the highest priority signalled group `group` interrupt, and acknowledges it.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
-    pub fn get_and_acknowledge_interrupt(group: OpInterruptGroup) -> Option<IntId> {
-        let icc_iar = if let OpInterruptGroup::Group0 = group {
-            read_icc_iar0_el1()
-        } else {
-            read_icc_iar1_el1()
+    pub fn get_and_acknowledge_interrupt(group: InterruptGroup) -> Option<IntId> {
+        let icc_iar = match group {
+            InterruptGroup::Group0 => read_icc_iar0_el1(),
+            InterruptGroup::Group1 => read_icc_iar1_el1(),
         };
 
         let intid = IntId(icc_iar);
@@ -373,11 +371,10 @@ impl GicV3<'_> {
 
     /// Informs the interrupt controller that the CPU has completed processing the given group `group` interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
-    pub fn end_interrupt(intid: IntId, group: OpInterruptGroup) {
-        if let OpInterruptGroup::Group0 = group {
-            write_icc_eoir0_el1(intid.0);
-        } else {
-            write_icc_eoir1_el1(intid.0);
+    pub fn end_interrupt(intid: IntId, group: InterruptGroup) {
+        match group {
+            InterruptGroup::Group0 => write_icc_eoir0_el1(intid.0),
+            InterruptGroup::Group1 => write_icc_eoir1_el1(intid.0),
         }
     }
 
@@ -554,11 +551,13 @@ pub enum SgiTargetGroup {
     OtherGroup1,
 }
 
-/// To select appropriate register for interrupt ops like ACK, EOI.
+/// An interrupt group, without distinguishing between secure and non-secure.
+///
+/// This is used to select which group of interrupts to get, acknowledge and end.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum OpInterruptGroup {
-    /// Perform an action for Group 0 interrupt.
+pub enum InterruptGroup {
+    /// Interrupt group 0.
     Group0,
-    /// Perform an action for Group 1 interrupt.
+    /// Interrupt group 1.
     Group1,
 }
