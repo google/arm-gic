@@ -551,11 +551,13 @@ pub enum SgiTargetGroup {
     OtherGroup1,
 }
 
-/// To select appropriate register for interrupt ops like ACK, EOI.
+/// An interrupt group, without distinguishing between secure and non-secure.
+///
+/// This is used to select which group of interrupts to get, acknowledge and end.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum InterruptGroup {
-    /// Perform an action for Group 0 interrupt.
+    /// Interrupt group 0.
     Group0,
-    /// Perform an action for Group 1 interrupt.
+    /// Interrupt group 1.
     Group1,
 }
