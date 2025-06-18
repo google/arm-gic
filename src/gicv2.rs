@@ -10,7 +10,7 @@ pub use self::registers::Typer;
 use self::registers::{Gicc, Gicd, GicdCtlr};
 use crate::{IntId, Trigger};
 use core::ptr::NonNull;
-use safe_mmio::{field, field_shared, UniqueMmioPointer};
+use safe_mmio::{UniqueMmioPointer, field, field_shared};
 
 /// Driver for an Arm Generic Interrupt Controller version 2.
 #[derive(Debug)]
