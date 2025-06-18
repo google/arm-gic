@@ -17,7 +17,7 @@ use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
 use registers::{GicrSgi, GicrTyper, Typer};
 use safe_mmio::fields::ReadPureWrite;
-use safe_mmio::{field, field_shared, split_fields, UniqueMmioPointer};
+use safe_mmio::{UniqueMmioPointer, field, field_shared, split_fields};
 use thiserror::Error;
 
 /// An error which may be returned from operations on a GIC Redistributor.

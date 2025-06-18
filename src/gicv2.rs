@@ -10,7 +10,7 @@ pub use self::registers::Typer;
 use self::registers::{Gicc, Gicd, GicdCtlr};
 use crate::{IntId, Trigger};
 use core::ptr::NonNull;
-use safe_mmio::{field, field_shared, UniqueMmioPointer};
+use safe_mmio::{UniqueMmioPointer, field, field_shared};
 
 /// Driver for an Arm Generic Interrupt Controller version 2.
 #[derive(Debug)]
@@ -30,9 +30,13 @@ impl GicV2<'_> {
     /// memory, and not have any other aliases, either via another instance of this driver or
     /// otherwise.
     pub unsafe fn new(gicd: *mut Gicd, gicc: *mut Gicc) -> Self {
-        Self {
-            gicd: UniqueMmioPointer::new(NonNull::new(gicd).unwrap()),
-            gicc: UniqueMmioPointer::new(NonNull::new(gicc).unwrap()),
+        // SAFETY: Our caller promises that the `gicd` and `gicc` pointers satisfy the requirements
+        // of `UniqueMmioPointer::new`.
+        unsafe {
+            Self {
+                gicd: UniqueMmioPointer::new(NonNull::new(gicd).unwrap()),
+                gicc: UniqueMmioPointer::new(NonNull::new(gicc).unwrap()),
+            }
         }
     }
 
