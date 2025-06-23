@@ -16,7 +16,7 @@ categories = ["embedded", "no-std", "hardware-support"]
 bitflags = "2.9.1"
 safe-mmio = "0.2.5"
 thiserror = { version = "2.0.12", default-features = false }
-zerocopy = { version = "0.8.25", features = ["derive"] }
+zerocopy = { version = "0.8.26", features = ["derive"] }
 
 [features]
 fakes = []
