@@ -4,6 +4,7 @@
 
 //! Fake implementations of system register getters and setters for unit tests.
 
+use super::IccSre;
 use std::sync::Mutex;
 
 /// Values of fake system registers.
@@ -13,38 +14,40 @@ pub static SYSREGS: Mutex<SystemRegisters> = Mutex::new(SystemRegisters::new());
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SystemRegisters {
     pub icc_asgi1r_el1: u64,
-    pub icc_iar0_el1: u32,
-    pub icc_iar1_el1: u32,
     pub icc_ctlr_el1: u32,
     pub icc_eoir0_el1: u32,
     pub icc_eoir1_el1: u32,
     pub icc_hppir0_el1: u32,
     pub icc_hppir1_el1: u32,
+    pub icc_iar0_el1: u32,
+    pub icc_iar1_el1: u32,
     pub icc_igrpen0_el1: u32,
     pub icc_igrpen1_el1: u32,
+    pub icc_igrpen1_el3: u32,
     pub icc_pmr_el1: u32,
     pub icc_sgi0r_el1: u64,
     pub icc_sgi1r_el1: u64,
-    pub icc_sre_el1: u32,
+    pub icc_sre_el1: IccSre,
 }
 
 impl SystemRegisters {
     const fn new() -> Self {
         Self {
             icc_asgi1r_el1: 0,
-            icc_iar0_el1: 0,
-            icc_iar1_el1: 0,
             icc_ctlr_el1: 0,
             icc_eoir0_el1: 0,
             icc_eoir1_el1: 0,
             icc_hppir0_el1: 0,
             icc_hppir1_el1: 0,
+            icc_iar0_el1: 0,
+            icc_iar1_el1: 0,
             icc_igrpen0_el1: 0,
             icc_igrpen1_el1: 0,
+            icc_igrpen1_el3: 0,
             icc_pmr_el1: 0,
             icc_sgi0r_el1: 0,
             icc_sgi1r_el1: 0,
-            icc_sre_el1: 0,
+            icc_sre_el1: IccSre::empty(),
         }
     }
 }
@@ -63,6 +66,11 @@ macro_rules! read_sysreg32 {
 macro_rules! write_sysreg32 {
     ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident) => {
         pub fn $function_name(value: u32) {
+            crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
+        }
+    };
+    ($sysreg:ident, $opc1:literal, $crm:ident, $crn:ident, $opc2: literal, $function_name:ident, $type:ty) => {
+        pub fn $function_name(value: $type) {
             crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
         }
     };
