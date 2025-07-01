@@ -383,6 +383,7 @@ impl GicV3<'_> {
         field_shared!(self.gicd, typer).read()
     }
 
+    /// Returns information about selected GIC redistributor.
     pub fn gicr_typer(&mut self, cpu: usize) -> GicrTyper {
         field_shared!(self.gicr_ptr(cpu), typer).read()
     }
