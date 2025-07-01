@@ -82,7 +82,7 @@ fn get_redistributor_window_size(gicr_base: *mut GicrSgi, gic_v4: bool) -> usize
 
     if field_shared!(first_gicr, typer)
         .read()
-        .contains(GicrTyper::VLPIS)
+        .virtual_lpis_supported()
     {
         // In this case GicV4 adds 2 frames:
         // vlpi: 64KiB
@@ -381,6 +381,10 @@ impl GicV3<'_> {
     /// Returns information about what the GIC implementation supports.
     pub fn typer(&self) -> Typer {
         field_shared!(self.gicd, typer).read()
+    }
+
+    pub fn gicr_typer(&mut self, cpu: usize) -> GicrTyper {
+        field_shared!(self.gicr_ptr(cpu), typer).read()
     }
 
     /// Returns a pointer to the GIC distributor registers.

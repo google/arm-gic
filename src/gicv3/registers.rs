@@ -66,22 +66,63 @@ impl Debug for GicrCtlr {
 }
 
 /// Interrupt controller redistributor type register value.
+#[derive(Clone, Copy, Debug, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
 #[repr(transparent)]
-#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
 pub struct GicrTyper(u64);
 
-bitflags! {
-    impl GicrTyper: u64 {
-        /// The redistributor supports Disable Processor Group.
-        const DPGS = 1 << 5;
-        /// This redistributor is the last redistributor on the chip.
-        const Last = 1 << 4;
-        /// Direct injection of LPIs is supported.
-        const DirectLPI = 1 << 3;
-        /// Virtual LPIs are supported.
-        const VLPIS = 1 << 1;
-        /// Physical LPIs are supported.
-        const PLIPS = 1 << 0;
+impl GicrTyper {
+    /// The identity of the PE associated with this Redistributor
+    ///
+    /// ret[0] provides Aff3, the Affinity level 3 value for the Redistributor.
+    /// ret[1] provides Aff2, the Affinity level 2 value for the Redistributor.
+    /// ret[2] provides Aff1, the Affinity level 1 value for the Redistributor.
+    /// ret[3] provides Aff0, the Affinity level 0 value for the Redistributor.
+    fn affinity_value(self) -> [u8; 4] {
+        ((self.0 >> 32) as u32).to_le_bytes()
+    }
+
+    /// MPIDR value for the corresponding core.
+    ///
+    /// This should be used to discover Redistributor order
+    /// with respect to the chosen linear core ID.
+    pub fn core_mpidr(self) -> u64 {
+        let affinity_value = self.affinity_value();
+
+        u64::from_le_bytes([
+            affinity_value[0],
+            affinity_value[1],
+            affinity_value[2],
+            0,
+            affinity_value[3],
+            0,
+            0,
+            0,
+        ])
+    }
+
+    /// The redistributor supports Disable Processor Group.
+    pub fn disable_processor_group_supported(self) -> bool {
+        self.0 & (1 << 5) != 0
+    }
+
+    /// This redistributor is the last redistributor on the chip.
+    pub fn last_redistributor(self) -> bool {
+        self.0 & (1 << 4) != 0
+    }
+
+    /// Returns whether direct injection of LPIs is supported
+    pub fn direct_lpis_supported(self) -> bool {
+        self.0 & (1 << 3) != 0
+    }
+
+    /// Returns whether virtual LPIs are supported.
+    pub fn virtual_lpis_supported(self) -> bool {
+        self.0 & (1 << 1) != 0
+    }
+
+    /// Returns whether physical LPIs are supported.
+    pub fn physical_lpis_supported(self) -> bool {
+        self.0 & (1 << 0) != 0
     }
 }
 
@@ -468,5 +509,47 @@ mod tests {
     fn gicr_size() {
         // The size of the Gicr struct should match the offset from `RD_base` to `SGI_base`.
         assert_eq!(size_of::<Gicr>(), 0x10000);
+    }
+
+    #[test]
+    fn gicr_typer_affinity() {
+        let gicr_typer = GicrTyper(0x12_34_56_78_c0ffeeee);
+
+        // Level 0 is 0x78, Level 1 is 0x56, etc.
+        let expected_affinity_values = [0x78, 0x56, 0x34, 0x12];
+        assert_eq!(gicr_typer.affinity_value(), expected_affinity_values);
+
+        // Affinity Level 3 is shifted (8 bit gap).
+        let expected_core_mpidr = 0x00_00_00_12_00_34_56_78;
+        assert_eq!(gicr_typer.core_mpidr(), expected_core_mpidr);
+    }
+
+    #[test]
+    fn gicr_typer_flags() {
+        // This flag is bit 0.
+        assert_eq!(GicrTyper(0b0000000).physical_lpis_supported(), false);
+        assert_eq!(GicrTyper(0b0000001).physical_lpis_supported(), true);
+
+        // This flag is bit 1.
+        assert_eq!(GicrTyper(0b0000000).virtual_lpis_supported(), false);
+        assert_eq!(GicrTyper(0b0000010).virtual_lpis_supported(), true);
+
+        // This flag is bit 3.
+        assert_eq!(GicrTyper(0b0000000).direct_lpis_supported(), false);
+        assert_eq!(GicrTyper(0b0001000).direct_lpis_supported(), true);
+
+        // This flag is bit 4.
+        assert_eq!(GicrTyper(0b0000000).last_redistributor(), false);
+        assert_eq!(GicrTyper(0b0010000).last_redistributor(), true);
+
+        // This flag is bit 5.
+        assert_eq!(
+            GicrTyper(0b0000000).disable_processor_group_supported(),
+            false
+        );
+        assert_eq!(
+            GicrTyper(0b0100000).disable_processor_group_supported(),
+            true
+        );
     }
 }
