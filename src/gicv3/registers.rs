@@ -527,29 +527,23 @@ mod tests {
     #[test]
     fn gicr_typer_flags() {
         // This flag is bit 0.
-        assert_eq!(GicrTyper(0b0000000).physical_lpis_supported(), false);
-        assert_eq!(GicrTyper(0b0000001).physical_lpis_supported(), true);
+        assert!(!GicrTyper(0b0000000).physical_lpis_supported());
+        assert!(GicrTyper(0b0000001).physical_lpis_supported());
 
         // This flag is bit 1.
-        assert_eq!(GicrTyper(0b0000000).virtual_lpis_supported(), false);
-        assert_eq!(GicrTyper(0b0000010).virtual_lpis_supported(), true);
+        assert!(!GicrTyper(0b0000000).virtual_lpis_supported());
+        assert!(GicrTyper(0b0000010).virtual_lpis_supported());
 
         // This flag is bit 3.
-        assert_eq!(GicrTyper(0b0000000).direct_lpis_supported(), false);
-        assert_eq!(GicrTyper(0b0001000).direct_lpis_supported(), true);
+        assert!(!GicrTyper(0b0000000).direct_lpis_supported());
+        assert!(GicrTyper(0b0001000).direct_lpis_supported());
 
         // This flag is bit 4.
-        assert_eq!(GicrTyper(0b0000000).last_redistributor(), false);
-        assert_eq!(GicrTyper(0b0010000).last_redistributor(), true);
+        assert!(!GicrTyper(0b0000000).last_redistributor());
+        assert!(GicrTyper(0b0010000).last_redistributor());
 
         // This flag is bit 5.
-        assert_eq!(
-            GicrTyper(0b0000000).disable_processor_group_supported(),
-            false
-        );
-        assert_eq!(
-            GicrTyper(0b0100000).disable_processor_group_supported(),
-            true
-        );
+        assert!(!GicrTyper(0b0000000).disable_processor_group_supported());
+        assert!(GicrTyper(0b0100000).disable_processor_group_supported());
     }
 }
