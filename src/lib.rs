@@ -48,6 +48,7 @@
 
 pub mod gicv2;
 pub mod gicv3;
+#[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
 mod sysreg;
 
 #[cfg(feature = "fakes")]
