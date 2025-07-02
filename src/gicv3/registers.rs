@@ -73,10 +73,10 @@ pub struct GicrTyper(u64);
 impl GicrTyper {
     /// The identity of the PE associated with this Redistributor
     ///
-    /// ret[0] provides Aff3, the Affinity level 3 value for the Redistributor.
-    /// ret[1] provides Aff2, the Affinity level 2 value for the Redistributor.
-    /// ret[2] provides Aff1, the Affinity level 1 value for the Redistributor.
-    /// ret[3] provides Aff0, the Affinity level 0 value for the Redistributor.
+    /// ret[0] provides Aff0, the Affinity level 0 value for the Redistributor.
+    /// ret[1] provides Aff1, the Affinity level 1 value for the Redistributor.
+    /// ret[2] provides Aff2, the Affinity level 2 value for the Redistributor.
+    /// ret[3] provides Aff3, the Affinity level 3 value for the Redistributor.
     fn affinity_value(self) -> [u8; 4] {
         ((self.0 >> 32) as u32).to_le_bytes()
     }
