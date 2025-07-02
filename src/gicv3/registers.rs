@@ -100,7 +100,27 @@ impl GicrTyper {
         ])
     }
 
-    /// The redistributor supports Disable Processor Group.
+    /// Returns the value of the PPInum field.
+    fn ppi_num(self) -> u32 {
+        ((self.0 >> 27) & 0b11111) as u32
+    }
+
+    /// Returns the maximum number of Extended PPI interrupt IDs supported.
+    pub fn max_eppi_count(self) -> u32 {
+        32 * self.ppi_num()
+    }
+
+    /// Returns a unique ID for the PE associated with this redistributor.
+    pub fn processor_number(self) -> u16 {
+        (self.0 >> 8) as u16
+    }
+
+    /// Returns whether MPAM is supported.
+    pub fn mpam_supported(self) -> bool {
+        self.0 & (1 << 6) != 0
+    }
+
+    /// Returns whether the redistributor supports Disable Processor Group.
     pub fn disable_processor_group_supported(self) -> bool {
         self.0 & (1 << 5) != 0
     }
@@ -110,9 +130,14 @@ impl GicrTyper {
         self.0 & (1 << 4) != 0
     }
 
-    /// Returns whether direct injection of LPIs is supported
+    /// Returns whether direct injection of LPIs is supported.
     pub fn direct_lpis_supported(self) -> bool {
         self.0 & (1 << 3) != 0
+    }
+
+    /// Returns whether VPENDBASER.Dirty is supported.
+    pub fn dirty_supported(self) -> bool {
+        self.0 & (1 << 2) != 0
     }
 
     /// Returns whether virtual LPIs are supported.
