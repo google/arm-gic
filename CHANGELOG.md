@@ -6,13 +6,14 @@
 
 - Added `SgiTargetGroup` parameter to `GicV3::send_sgi` to specify which group of interrupt should
   be generated.
-- Added `OpInterruptGroup` parameter to `GicV3::get_and_acknowledge_interrupt` and
+- Added `InterruptGroup` parameter to `GicV3::get_and_acknowledge_interrupt` and
   `GicV3::end_interrupt`.
 
 ### Improvements
 
 - Added new method `GivV3::get_pending_interrupt` to check for a pending interrupt without
   acknowledging it.
+- Added `GicV3::gicr_typer` method to return a `GicrTyper`.
 
 ## 0.4.0
 
