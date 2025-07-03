@@ -7,6 +7,7 @@
 pub mod registers;
 
 use self::registers::{Gicd, GicdCtlr, Gicr, GicrCtlr, Sgi, Waker};
+#[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
 use crate::sysreg::{
     read_icc_hppir0_el1, read_icc_hppir1_el1, read_icc_iar0_el1, read_icc_iar1_el1,
     write_icc_asgi1r_el1, write_icc_ctlr_el1, write_icc_eoir0_el1, write_icc_eoir1_el1,
@@ -129,6 +130,7 @@ impl GicV3<'_> {
     /// This disables the use of `ICC_PMR_EL1` as a hint for interrupt distribution, configures a
     /// write to an EOI register to also deactivate the interrupt, and configures preemption groups
     /// for group 0 and group 1 interrupts separately.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn init_cpu(&mut self, cpu: usize) {
         // Enable system register access.
         write_icc_sre_el1(0x01);
@@ -145,6 +147,7 @@ impl GicV3<'_> {
     /// Initialises the GIC and marks the given CPU core as awake.
     ///
     /// `cpu` should be the linear index of the CPU core as used by the GIC redistributor.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn setup(&mut self, cpu: usize) {
         self.init_cpu(cpu);
 
@@ -168,11 +171,13 @@ impl GicV3<'_> {
     }
 
     /// Enables or disables group 0 interrupts.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn enable_group0(enable: bool) {
         write_icc_igrpen0_el1(if enable { 0x01 } else { 0x00 });
     }
 
     /// Enables or disables group 1 interrupts for the current security state.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn enable_group1(enable: bool) {
         write_icc_igrpen1_el1(if enable { 0x01 } else { 0x00 });
     }
@@ -224,6 +229,7 @@ impl GicV3<'_> {
     /// Sets the priority mask for the current CPU core.
     ///
     /// Only interrupts with a higher priority (numerically lower) will be signalled.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn set_priority_mask(min_priority: u8) {
         write_icc_pmr_el1(min_priority.into());
     }
@@ -304,6 +310,7 @@ impl GicV3<'_> {
     }
 
     /// Sends a group `group` software-generated interrupt (SGI) to the given cores.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn send_sgi(intid: IntId, target: SgiTarget, group: SgiTargetGroup) {
         assert!(intid.is_sgi());
 
@@ -338,6 +345,7 @@ impl GicV3<'_> {
     /// Gets the ID of the highest priority pending group `group` interrupt on the CPU interface.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn get_pending_interrupt(group: InterruptGroup) -> Option<IntId> {
         let icc_hppir = match group {
             InterruptGroup::Group0 => read_icc_hppir0_el1(),
@@ -355,6 +363,7 @@ impl GicV3<'_> {
     /// Gets the ID of the highest priority signalled group `group` interrupt, and acknowledges it.
     ///
     /// Returns `None` if there is no pending interrupt of sufficient priority.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn get_and_acknowledge_interrupt(group: InterruptGroup) -> Option<IntId> {
         let icc_iar = match group {
             InterruptGroup::Group0 => read_icc_iar0_el1(),
@@ -371,6 +380,7 @@ impl GicV3<'_> {
 
     /// Informs the interrupt controller that the CPU has completed processing the given group `group` interrupt.
     /// This drops the interrupt priority and deactivates the interrupt.
+    #[cfg(any(test, feature = "fakes", target_arch = "aarch64", target_arch = "arm"))]
     pub fn end_interrupt(intid: IntId, group: InterruptGroup) {
         match group {
             InterruptGroup::Group0 => write_icc_eoir0_el1(intid.0),
