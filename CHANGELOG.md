@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bugfixes
+
+- Fixed example in crate documentation.
+
 ## 0.5.0
 
 ### Breaking changes
