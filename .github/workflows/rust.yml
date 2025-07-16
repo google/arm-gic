@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test on host
-        run: cargo test --target=x86_64-unknown-linux-gnu --lib
+        run: cargo test --target=x86_64-unknown-linux-gnu --features=fakes
 
   format:
     runs-on: ubuntu-latest
