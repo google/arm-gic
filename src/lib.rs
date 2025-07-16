@@ -58,8 +58,10 @@ mod sysreg;
 
 #[cfg(feature = "fakes")]
 pub use sysreg::fake as sysreg_fake;
+#[cfg(feature = "fakes")]
+pub use sysreg::fake::{irq_disable, irq_enable, wfi};
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 use core::arch::asm;
 use core::fmt::{Debug, Formatter, Result};
 
@@ -241,7 +243,7 @@ impl From<IntId> for u32 {
 }
 
 /// Disables debug, SError, IRQ and FIQ exceptions.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 pub fn irq_disable() {
     // SAFETY: Writing to this system register doesn't access memory in any way.
     unsafe {
@@ -250,7 +252,7 @@ pub fn irq_disable() {
 }
 
 /// Enables debug, SError, IRQ and FIQ exceptions.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 pub fn irq_enable() {
     // SAFETY: Writing to this system register doesn't access memory in any way.
     unsafe {
@@ -259,7 +261,7 @@ pub fn irq_enable() {
 }
 
 /// Waits for an interrupt.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 pub fn wfi() {
     // SAFETY: This doesn't access memory in any way.
     unsafe {

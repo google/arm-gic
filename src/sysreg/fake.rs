@@ -26,6 +26,7 @@ pub struct SystemRegisters {
     pub icc_sgi0r_el1: u64,
     pub icc_sgi1r_el1: u64,
     pub icc_sre_el1: u32,
+    pub daif: u64,
 }
 
 impl SystemRegisters {
@@ -45,6 +46,7 @@ impl SystemRegisters {
             icc_sgi0r_el1: 0,
             icc_sgi1r_el1: 0,
             icc_sre_el1: 0,
+            daif: 0,
         }
     }
 }
@@ -76,4 +78,19 @@ macro_rules! write_sysreg64 {
             crate::sysreg::fake::SYSREGS.lock().unwrap().$sysreg = value;
         }
     };
+}
+
+/// Disables debug, SError, IRQ and FIQ exceptions.
+pub fn irq_disable() {
+    SYSREGS.lock().unwrap().daif = 0b11_1100_0000;
+}
+
+/// Enables debug, SError, IRQ and FIQ exceptions.
+pub fn irq_enable() {
+    SYSREGS.lock().unwrap().daif = 0;
+}
+
+/// Waits for an interrupt.
+pub fn wfi() {
+    // No-op, just return immediately.
 }
