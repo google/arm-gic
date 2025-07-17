@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Bugfixes
+
+- Fixed example in crate documentation.
+
+### Improvements
+
+- Added fakes for `irq_disable`, `irq_enable` and `wfi`.
+
 ## 0.5.0
 
 ### Breaking changes

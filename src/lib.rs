@@ -11,27 +11,31 @@
 //!
 //! Using a GICv3 on a single-core aarch64 system:
 //!
-//! ```
+//! ```no_run
 //! use arm_gic::{
-//!     gicv3::{GicV3, SgiTarget},
-//!     irq_enable, IntId,
+//!     IntId,
+//!     gicv3::{
+//!         GicV3, SgiTarget, SgiTargetGroup,
+//!         registers::{Gicd, GicrSgi},
+//!     },
+//!     irq_enable,
 //! };
 //!
 //! // Base addresses of the GICv3 distributor and redistributor.
-//! const GICD_BASE_ADDRESS: *mut u64 = 0x800_0000 as _;
-//! const GICR_BASE_ADDRESS: *mut u64 = 0x80A_0000 as _;
+//! const GICD_BASE_ADDRESS: *mut Gicd = 0x800_0000 as _;
+//! const GICR_BASE_ADDRESS: *mut GicrSgi = 0x80A_0000 as _;
 //!
 //! // Initialise the GIC.
-//! let mut gic = unsafe { GicV3::new(GICD_BASE_ADDRESS, GICR_BASE_ADDRESS, 1, 0x20000) };
+//! let mut gic = unsafe { GicV3::new(GICD_BASE_ADDRESS, GICR_BASE_ADDRESS, 1, false) };
 //! gic.setup(0);
 //!
 //! // Configure an SGI and then send it to ourself.
 //! let sgi_intid = IntId::sgi(3);
-//! SingleCoreGicV3::set_priority_mask(0xff);
+//! GicV3::set_priority_mask(0xff);
 //! gic.set_interrupt_priority(sgi_intid, Some(0), 0x80);
 //! gic.enable_interrupt(sgi_intid, Some(0), true);
 //! irq_enable();
-//! SingleCoreGicV3::send_sgi(
+//! GicV3::send_sgi(
 //!     sgi_intid,
 //!     SgiTarget::List {
 //!         affinity3: 0,
@@ -39,6 +43,7 @@
 //!         affinity1: 0,
 //!         target_list: 0b1,
 //!     },
+//!     SgiTargetGroup::CurrentGroup1,
 //! );
 //! ```
 
@@ -53,8 +58,10 @@ mod sysreg;
 
 #[cfg(feature = "fakes")]
 pub use sysreg::fake as sysreg_fake;
+#[cfg(feature = "fakes")]
+pub use sysreg::fake::{irq_disable, irq_enable, wfi};
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 use core::arch::asm;
 use core::fmt::{Debug, Formatter, Result};
 
@@ -236,7 +243,7 @@ impl From<IntId> for u32 {
 }
 
 /// Disables debug, SError, IRQ and FIQ exceptions.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 pub fn irq_disable() {
     // SAFETY: Writing to this system register doesn't access memory in any way.
     unsafe {
@@ -245,7 +252,7 @@ pub fn irq_disable() {
 }
 
 /// Enables debug, SError, IRQ and FIQ exceptions.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 pub fn irq_enable() {
     // SAFETY: Writing to this system register doesn't access memory in any way.
     unsafe {
@@ -254,7 +261,7 @@ pub fn irq_enable() {
 }
 
 /// Waits for an interrupt.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "fakes")))]
 pub fn wfi() {
     // SAFETY: This doesn't access memory in any way.
     unsafe {
