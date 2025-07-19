@@ -162,8 +162,14 @@ impl GicV3<'_> {
             }
         }
         // Put all SPIs into non-secure group 1.
-        for i in 1..32 {
-            field!(self.gicd, igroupr).get(i).unwrap().write(0xffffffff);
+        let max_reg = self.typer().num_spis() as usize + 32;
+        for i in (32..max_reg).step_by(32) {
+            let bits = if max_reg - i >= 32 {
+                0xffffffff
+            } else {
+                (1 << (max_reg - i)) - 1
+            };
+            field!(self.gicd, igroupr).get(i).unwrap().write(bits);
         }
 
         // Enable group 1 for the current security state.
@@ -203,17 +209,25 @@ impl GicV3<'_> {
 
     /// Enables or disables all interrupts on all CPU cores.
     pub fn enable_all_interrupts(&mut self, enable: bool) {
-        for i in 1..32 {
+        // Calculate the maximum register index for all indices.
+        // The first 32 registers are for SGIs and PPIs.
+        let max_reg = self.typer().num_spis() as usize + 32;
+        for i in (32..max_reg).step_by(32) {
+            let bits = if max_reg - i >= 32 {
+                0xffffffff
+            } else {
+                (1 << (max_reg - i)) - 1
+            };
             if enable {
                 field!(self.gicd, isenabler)
-                    .get(i)
+                    .get(i / 32)
                     .unwrap()
-                    .write(0xffffffff);
+                    .write(bits);
             } else {
                 field!(self.gicd, icenabler)
-                    .get(i)
+                    .get(i / 32)
                     .unwrap()
-                    .write(0xffffffff);
+                    .write(bits);
             }
         }
         for cpu in 0..self.cpu_count {
