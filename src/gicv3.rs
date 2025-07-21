@@ -169,7 +169,7 @@ impl GicV3<'_> {
             } else {
                 (1 << (max_reg - i)) - 1
             };
-            field!(self.gicd, igroupr).get(i).unwrap().write(bits);
+            field!(self.gicd, igroupr).get(i / 32).unwrap().write(bits);
         }
 
         // Enable group 1 for the current security state.
