@@ -4,7 +4,8 @@
 
 ### Breaking changes
 
-- Changed type of `Gicr` `iidr` field.
+- Changed type of various fields on `Gicr`.
+- Changed type of `Sgi` `nsacr` field.
 - Added `pwrr` field to `Gicr`.
 - Renumbered implementation defined fields in `Gicr`.
 
