@@ -2,13 +2,23 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- Changed type of various fields on `Gicr`.
+- Changed type of `Sgi` `nsacr` field.
+- Added `pwrr` field to `Gicr`.
+- Renumbered implementation defined fields in `Gicr`.
+
 ### Bugfixes
 
 - Fixed example in crate documentation.
+- Fixed `GicV3::setup` to only configure SPIs which exist.
 
 ### Improvements
 
 - Added fakes for `irq_disable`, `irq_enable` and `wfi`.
+- Added `GicV3::gicr_power_on` and `GicV3::gicr_power_off` methods for GIC-600
+  and GIC-700.
 
 ## 0.5.0
 

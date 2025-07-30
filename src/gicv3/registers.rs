@@ -10,7 +10,7 @@ use core::{
     cmp::min,
     fmt::{self, Debug, Formatter},
 };
-use safe_mmio::fields::{ReadPure, ReadPureWrite};
+use safe_mmio::fields::{ReadPure, ReadPureWrite, WriteOnly};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(transparent)]
@@ -454,13 +454,13 @@ pub struct Gicr {
     /// Redistributor type register.
     pub typer: ReadPure<GicrTyper>,
     /// Error reporting status register.
-    pub statusr: u32,
+    pub statusr: ReadPureWrite<u32>,
     /// Redistributor wake register.
     pub waker: ReadPureWrite<Waker>,
     /// Report maximum PARTID and PMG register.
-    pub mpamidr: u32,
+    pub mpamidr: ReadPure<u32>,
     /// Set PARTID and PMG register.
-    pub partidr: u32,
+    pub partidr: ReadPureWrite<u32>,
     /// Implementation defined registers.
     pub implementation_defined1: u32,
     /// Redistributor power register (implemented in GIC-600 and GIC-700).
@@ -468,23 +468,23 @@ pub struct Gicr {
     /// Implementation defined registers.
     pub implementation_defined2: [u32; 6],
     /// Set LPI pending register.
-    pub setlprir: u64,
+    pub setlprir: WriteOnly<u64>,
     /// Clear LPI pending register.
-    pub clrlpir: u64,
+    pub clrlpir: WriteOnly<u64>,
     _reserved0: [u32; 8],
     /// Redistributor properties base address register.
-    pub propbaser: u64,
+    pub propbaser: ReadPureWrite<u64>,
     /// Redistributor LPI pending table base address register.
-    pub pendbaser: u64,
+    pub pendbaser: ReadPureWrite<u64>,
     _reserved1: [u32; 8],
     /// Redistributor invalidate LPI register.
-    pub invlpir: u64,
+    pub invlpir: WriteOnly<u64>,
     _reserved2: u64,
     /// Redistributor invalidate all register.
-    pub invallr: u64,
+    pub invallr: WriteOnly<u64>,
     _reserved3: u64,
     /// Redistributor synchronize register.
-    pub syncr: u32,
+    pub syncr: ReadPure<u32>,
     _reserved4: [u32; 15],
     /// Implementation defined registers.
     pub implementation_defined3: u64,
@@ -495,7 +495,7 @@ pub struct Gicr {
     /// Implementation defined registers.
     pub implementation_defined5: [u32; 4084],
     /// ID registers.
-    pub id_registers: [u32; 12],
+    pub id_registers: [ReadPure<u32>; 12],
 }
 
 /// GIC Redistributor SGI and PPI registers.
@@ -552,7 +552,7 @@ pub struct Sgi {
     pub igrpmodr_e: [ReadPureWrite<u32>; 2],
     _reserved10: [u32; 61],
     /// Non-secure access control register.
-    pub nsacr: u32,
+    pub nsacr: ReadPureWrite<u32>,
     _reserved11: [u32; 95],
     /// Non-maskable interrupt register for PPIs.
     pub inmir0: u32,
