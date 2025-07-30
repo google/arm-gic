@@ -65,6 +65,62 @@ impl Debug for GicrCtlr {
     }
 }
 
+/// This register controls the powerup sequence of the Redistributors.
+///
+/// It is implemented only for GIC-600 and GIC-700
+/// and is used to power on/off the redistributors.
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
+pub struct GicrPwrr(u32);
+
+bitflags! {
+    impl GicrPwrr: u32 {
+        /// (RDGPO)
+        /// This bit indicates:
+        /// 0 = GCI (GIC Cluster Interface) is powered up and can be accessed.
+        /// 1 = It is safe to power down the GCI.
+        const RedistributorGroupPoweredOff = 1 << 3;
+
+        /// (RDGPD)
+        /// This bit indicates the intentional power state of the GCI:
+        /// 0 = Intend to power up
+        /// 1 = Intend to power down
+        /// The GCI has reached its intentional power state when RDGPD = RDGPO.
+        const RedistributorGroupPowerDown = 1 << 2;
+
+        /// (RDAG)
+        /// Setting this bit to 1 applies the RDPD value to all Redistributors
+        /// on the same GCI.
+        /// If the RDPD value cannot be applied to all cores in the group,
+        /// then the GIC ignores this request.
+        const RedistributorApplyGroup = 1 << 1;
+
+        /// (RDPD)
+        /// 0 = Redistributor is powered up and can be accessed.
+        /// 1 = The core permits the Redistributor to be powered down.
+        const RedistributorPowerDown = 1 << 0;
+    }
+}
+
+/// This register provides information about
+/// the implementer and revision of the Redistributor.
+#[repr(transparent)]
+#[derive(Copy, Clone, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
+pub struct GicrIidr(u32);
+
+impl GicrIidr {
+    pub const MODEL_ID_ARM_GIC_600: u32 = 0x0200043b;
+    pub const MODEL_ID_ARM_GIC_600AE: u32 = 0x0300043b;
+    pub const MODEL_ID_ARM_GIC_700: u32 = 0x0400043b;
+
+    /// Returns model ID of the redistributor.
+    pub fn model_id(self) -> u32 {
+        const PRODUCT_ID_MASK: u32 = 0xff << 24;
+        const IMPLEMENTER_MASK: u32 = 0xfff;
+        self.0 & (PRODUCT_ID_MASK | IMPLEMENTER_MASK)
+    }
+}
+
 /// Interrupt controller redistributor type register value.
 #[derive(Clone, Copy, Debug, Eq, FromBytes, Immutable, IntoBytes, KnownLayout, PartialEq)]
 #[repr(transparent)]
@@ -394,7 +450,7 @@ pub struct Gicr {
     /// Redistributor control register.
     pub ctlr: ReadPureWrite<GicrCtlr>,
     /// Implementer identification register.
-    pub iidr: u32,
+    pub iidr: ReadPure<GicrIidr>,
     /// Redistributor type register.
     pub typer: ReadPure<GicrTyper>,
     /// Error reporting status register.
@@ -406,7 +462,11 @@ pub struct Gicr {
     /// Set PARTID and PMG register.
     pub partidr: u32,
     /// Implementation defined registers.
-    pub implementation_defined1: [u32; 8],
+    pub implementation_defined1: u32,
+    /// Redistributor power register (implemented in GIC-600 and GIC-700).
+    pub pwrr: ReadPureWrite<GicrPwrr>,
+    /// Implementation defined registers.
+    pub implementation_defined2: [u32; 6],
     /// Set LPI pending register.
     pub setlprir: u64,
     /// Clear LPI pending register.
@@ -427,13 +487,13 @@ pub struct Gicr {
     pub syncr: u32,
     _reserved4: [u32; 15],
     /// Implementation defined registers.
-    pub implementation_defined2: u64,
+    pub implementation_defined3: u64,
     _reserved5: u64,
     /// Implementation defined registers.
-    pub implementation_defined3: u64,
+    pub implementation_defined4: u64,
     _reserved6: [u32; 12218],
     /// Implementation defined registers.
-    pub implementation_defined4: [u32; 4084],
+    pub implementation_defined5: [u32; 4084],
     /// ID registers.
     pub id_registers: [u32; 12],
 }

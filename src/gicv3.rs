@@ -16,9 +16,9 @@ use crate::sysreg::{
 };
 use crate::{IntId, Trigger};
 use core::{hint::spin_loop, ptr::NonNull};
-use registers::{GicrSgi, GicrTyper, Typer};
+use registers::{GicrIidr, GicrPwrr, GicrSgi, GicrTyper, Typer};
 use safe_mmio::fields::ReadPureWrite;
-use safe_mmio::{UniqueMmioPointer, field, field_shared, split_fields};
+use safe_mmio::{SharedMmioPointer, UniqueMmioPointer, field, field_shared, split_fields};
 use thiserror::Error;
 
 /// An error which may be returned from operations on a GIC Redistributor.
@@ -480,6 +480,81 @@ impl GicV3<'_> {
     pub fn gicr_barrier(&mut self, cpu: usize) {
         let gicr = self.gicr_ptr(cpu);
         while field_shared!(gicr, ctlr).read().contains(GicrCtlr::RWP) {}
+    }
+
+    fn gicr_wait_until_group_not_in_transit(gicr_ptr: &SharedMmioPointer<Gicr>) {
+        let pwrr = field_shared!(gicr_ptr, pwrr).read();
+
+        // Check group not transitioning
+        while pwrr.contains(GicrPwrr::RedistributorGroupPowerDown)
+            != pwrr.contains(GicrPwrr::RedistributorGroupPoweredOff)
+        {
+            spin_loop();
+        }
+    }
+
+    fn gicr_needs_power_management(gicr_ptr: &SharedMmioPointer<Gicr>) -> bool {
+        let iidr: GicrIidr = field_shared!(gicr_ptr, iidr).read();
+
+        iidr.model_id() == GicrIidr::MODEL_ID_ARM_GIC_600
+            || iidr.model_id() == GicrIidr::MODEL_ID_ARM_GIC_600AE
+            || iidr.model_id() == GicrIidr::MODEL_ID_ARM_GIC_700
+    }
+
+    fn gic600_gic700_gicr_power_on(mut gicr_ptr: UniqueMmioPointer<Gicr>) {
+        loop {
+            // Wait until group not transitioning.
+            Self::gicr_wait_until_group_not_in_transit(&gicr_ptr);
+
+            // Power on the redistributor.
+            field!(gicr_ptr, pwrr).write(GicrPwrr::empty());
+
+            // Wait until the power on state is reflected.
+            // If RDPD == 0 then powered on.
+            if !field_shared!(gicr_ptr, pwrr)
+                .read()
+                .contains(GicrPwrr::RedistributorPowerDown)
+            {
+                break;
+            }
+        }
+    }
+
+    fn gic600_gic700_gicr_power_off(mut gicr_ptr: UniqueMmioPointer<Gicr>) {
+        // Wait until group not transitioning.
+        Self::gicr_wait_until_group_not_in_transit(&gicr_ptr);
+
+        // Power off the redistributor.
+        field!(gicr_ptr, pwrr).write(GicrPwrr::RedistributorPowerDown);
+
+        // If this is the last man, turning this redistributor frame off will
+        // result in the group itself being powered off and RDGPD = 1.
+        // In that case, wait as long as it's in transition, or has aborted
+        // the transition altogether for any reason.
+        if field_shared!(gicr_ptr, pwrr)
+            .read()
+            .contains(GicrPwrr::RedistributorGroupPowerDown)
+        {
+            Self::gicr_wait_until_group_not_in_transit(&gicr_ptr);
+        }
+    }
+
+    /// Power on GIC-600 or GIC-700 redistributor (if detected).
+    pub fn gicr_power_on(&mut self, cpu: usize) {
+        let gicr_ptr = self.gicr_ptr(cpu);
+
+        if Self::gicr_needs_power_management(&gicr_ptr) {
+            Self::gic600_gic700_gicr_power_on(gicr_ptr);
+        }
+    }
+
+    /// Power off GIC-600 or GIC-700 redistributor (if detected).
+    pub fn gicr_power_off(&mut self, cpu: usize) {
+        let gicr_ptr = self.gicr_ptr(cpu);
+
+        if Self::gicr_needs_power_management(&gicr_ptr) {
+            Self::gic600_gic700_gicr_power_off(gicr_ptr);
+        }
     }
 
     /// Informs the GIC redistributor that the core has awakened.
