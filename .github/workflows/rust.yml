@@ -20,7 +20,7 @@ jobs:
           - aarch64-unknown-none
           - armv7a-none-eabi
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install ${{ matrix.target }} toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -39,7 +39,7 @@ jobs:
       checks: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Test on host
         run: cargo test --features=fakes
       - name: Run clippy
@@ -51,6 +51,6 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Format Rust code
         run: cargo fmt --all -- --check
