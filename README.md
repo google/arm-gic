@@ -3,6 +3,12 @@
 [![crates.io page](https://img.shields.io/crates/v/arm-gic.svg)](https://crates.io/crates/arm-gic)
 [![docs.rs page](https://docs.rs/arm-gic/badge.svg)](https://docs.rs/arm-gic)
 
+**This repository is now deprecated.** Future development will happen on the
+[TrustedFirmware.org Gerrit](https://review.trustedfirmware.org/q/project:arm-firmware-crates/arm-gic).
+https://github.com/ArmFirmwareCrates/arm-gic should be used for issues.
+
+---
+
 This crate provides Rust drivers for the Arm Generic Interrupt Controller version 2, 3 or 4 (GICv2,
 GICv3 and GICv4) on aarch32 and aarch64.
 
